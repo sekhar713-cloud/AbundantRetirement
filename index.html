@@ -405,27 +405,24 @@ function showTab(id) {
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
 }
 
-function jumpToTaxRow(year) {
-  /* Activate Tax Alpha tab directly — match button by onclick string, not by index */
+function jumpToTaxCalc(ordIncome, afterTaxTarget) {
+  /* Navigate to Tax Calc tab */
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  const panel = document.getElementById('tab-tax');
+  const panel = document.getElementById('tab-taxcalc');
   if (panel) panel.classList.add('active');
   document.querySelectorAll('.tab').forEach(t => {
-    if (t.getAttribute('onclick') === "showTab('tax')") t.classList.add('active');
+    if (t.getAttribute('onclick') === "showTab('taxcalc')") t.classList.add('active');
   });
-  /* Scroll to and highlight the matching year row */
-  setTimeout(() => {
-    const el = document.getElementById('tax-yr-' + year);
-    if (!el) return;
-    el.scrollIntoView({behavior: 'smooth', block: 'center'});
-    el.style.background = 'rgba(91,141,238,0.22)';
-    el.style.transition = '';
-    setTimeout(() => {
-      el.style.transition = 'background 1.8s ease';
-      el.style.background = '';
-    }, 1200);
-  }, 100);
+  /* Pre-populate inputs: ordinary income (DCP+Traditional) + after-tax target */
+  const setField = (id, val, max) => {
+    document.getElementById(id).value = Math.min(Math.round(val), max);
+    document.getElementById(id + 'Num').value = formatNum(Math.round(val));
+  };
+  setField('tcOrd', ordIncome,      1000000);
+  setField('tcDiv', 0,              1000000);
+  setField('tcTarget', afterTaxTarget, 1500000);
+  solveTax();
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1193,7 +1190,7 @@ function updateRetirement(){
     <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">60+ voluntary · 73+ RMD</small></th>
     <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
     <th>Total Draw</th>
-    <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → breakdown</small></th>
+    <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → Tax Calc</small></th>
     <th>After-Tax</th><th>End Balance</th><th>CWR</th>
   </tr></thead><tbody>`;
 
@@ -1207,7 +1204,7 @@ function updateRetirement(){
       <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw)+(r.isRMD?' <span style="font-size:10px;color:var(--accent);">RMD</span>':''):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
-      <td class="tax-link" onclick="jumpToTaxRow(${r.year})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to see tax breakdown in Tax Alpha tab">${fmtD(r.taxPaid)}</td>
+      <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.dcpDraw+r.tradDraw)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's ordinary income and after-tax target">${fmtD(r.taxPaid)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
       <td style="color:${warn?'var(--danger)':'var(--text)'};font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
       <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.cwr.toFixed(1)}%</td>
