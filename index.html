@@ -21,6 +21,7 @@
   --taxable-color: #5b8dee;
   --trad-color: #c8a96e;
   --roth-color: #4ecdc4;
+  --dcp-color: #a78bfa;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -142,6 +143,38 @@ body {
 .burn-card .stage-name { font-size: 13px; font-weight: 600; }
 .burn-card .stage-amt { font-size: 20px; font-weight: 700; font-family: 'DM Mono', monospace; margin-top: 4px; }
 .burn-card .stage-sub { font-size: 10px; color: var(--muted); }
+
+/* Editable portfolio inputs */
+.portfolio-val-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 22px;
+  font-weight: 600;
+  font-family: 'DM Sans', sans-serif;
+  padding: 2px 0;
+  outline: none;
+  margin-top: 4px;
+}
+.portfolio-val-input:focus { border-bottom-color: var(--accent); }
+
+.addition-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: 'DM Mono', monospace;
+  padding: 4px 6px;
+  outline: none;
+  text-align: right;
+  box-sizing: border-box;
+}
+.addition-input:hover { border-color: var(--border); }
+.addition-input:focus { border-color: var(--accent); background: var(--surface2); }
 </style>
 </head>
 <body>
@@ -156,7 +189,19 @@ body {
 
   <!-- ═══ OVERVIEW (V1) ═══ -->
   <div id="tab-overview" class="tab-panel active">
+
+    <div class="subsection">
+      <div class="section-title">Starting portfolio</div>
+      <div id="portfolio-inputs"></div>
+    </div>
+
+    <div class="subsection">
+      <div class="section-title">Annual funding — next 4 years</div>
+      <div id="additions-section"></div>
+    </div>
+
     <div class="metrics" id="overview-metrics"></div>
+
     <div class="subsection">
       <div class="section-title">Fund allocation — SCV tilt + direct indexing</div>
       <table class="fund-table">
@@ -181,6 +226,12 @@ body {
     </div>
     <div class="subsection">
       <div class="section-title">Account balances over 30 years</div>
+      <div class="legend" style="margin-bottom:8px;">
+        <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Taxable</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--roth-color);"></span>Roth</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--dcp-color);"></span>DCP</span>
+      </div>
       <div id="account-bars"></div>
     </div>
   </div>
@@ -343,7 +394,26 @@ function showTab(id) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   V1 DATA
+   STATE — editable portfolio balances & annual additions
+   ═══════════════════════════════════════════════════════════════════ */
+const state = {
+  taxable:     4000000,
+  traditional: 4000000,
+  roth:        2000000,
+  dcp:         2500000,
+  additions: [
+    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
+    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
+    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
+    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
+  ],
+};
+
+function stateBase()     { return state.taxable + state.traditional + state.roth + state.dcp; }
+function stateTotalAdd() { return state.additions.reduce((s,a) => s+a.taxable+a.traditional+a.roth+a.dcp, 0); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   V1 STATIC DATA
    ═══════════════════════════════════════════════════════════════════ */
 const funds = [
   {name:'Direct Index US Large Value',ticker:'DI-AVLV',weight:15,er:'0.20%',cat:'US Large Value',loc:'Taxable',rationale:'Direct indexing replaces ETF — daily TLH, FTC-eligible'},
@@ -361,27 +431,134 @@ const alphas = [
   {title:'Estate Alpha',desc:'Direct-indexed taxable gets full step-up on every lot. Roth passes tax-free. Traditional converted pre-death.',color:'var(--danger)'},
 ];
 
-const portfolio = {base:10000000, additions:2500000, addYears:4, nqdc:2500000};
 const fmtD = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
 const fmtM = n => '$'+(n/1e6).toFixed(2)+'M';
+function formatNum(n){return Math.round(n).toLocaleString();}
+function parseNum(s){return parseInt(String(s).replace(/[^0-9.-]/g,''),10)||0;}
 
-/* ═══ OVERVIEW ═══ */
+/* ═══════════════════════════════════════════════════════════════════
+   OVERVIEW — editable portfolio + additions
+   ═══════════════════════════════════════════════════════════════════ */
+const acctDefs = [
+  {key:'taxable',     label:'Taxable',            color:'var(--taxable-color)'},
+  {key:'traditional', label:'Traditional / 401k',  color:'var(--trad-color)'},
+  {key:'roth',        label:'Roth',                color:'var(--roth-color)'},
+  {key:'dcp',         label:'DCP / NQDC',          color:'var(--dcp-color)'},
+];
+
 function buildOverview() {
-  const total = portfolio.base + (portfolio.additions*portfolio.addYears) + portfolio.nqdc;
-  document.getElementById('overview-metrics').innerHTML = `
-    <div class="metric-card"><div class="label">Base portfolio</div><div class="value accent">$${(portfolio.base/1e6).toFixed(0)}M</div></div>
-    <div class="metric-card"><div class="label">Annual additions</div><div class="value accent2">$${(portfolio.additions/1e6).toFixed(1)}M × ${portfolio.addYears} yrs</div></div>
-    <div class="metric-card"><div class="label">NQDC deferred</div><div class="value accent3">$${(portfolio.nqdc/1e6).toFixed(1)}M</div></div>
-    <div class="metric-card"><div class="label">Total capital</div><div class="value">$${(total/1e6).toFixed(1)}M</div><div class="sub">30-year horizon</div></div>
-    <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">SCV tilt + DI + private credit</div></div>
-    <div class="metric-card"><div class="label">Blended ER</div><div class="value">0.31%</div></div>`;
+  /* --- Starting portfolio cards --- */
+  document.getElementById('portfolio-inputs').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:8px;">
+      ${acctDefs.map(a => `
+        <div class="metric-card">
+          <div class="label" style="color:${a.color};">${a.label}</div>
+          <input class="portfolio-val-input" id="p-${a.key}"
+            value="${formatNum(state[a.key])}"
+            onchange="updateStateVal('${a.key}',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </div>`).join('')}
+      <div class="metric-card">
+        <div class="label">Total starting</div>
+        <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(stateBase())}</div>
+      </div>
+    </div>`;
+
+  /* --- Annual additions table --- */
+  buildAdditionsTable();
+
+  /* --- Summary metrics strip --- */
+  refreshSummaryMetrics();
+
+  /* --- Fund rows --- */
   document.getElementById('fund-rows').innerHTML = funds.map(f => {
     const bc = f.loc==='Taxable'?'bucket-taxable':f.loc==='Traditional'?'bucket-trad':'bucket-roth';
     return `<tr><td>${f.name}</td><td class="ticker">${f.ticker}</td><td>${f.weight}%</td><td>${f.er}</td><td>${f.cat}</td><td class="${bc}">${f.loc}</td></tr>`;
   }).join('');
+
+  /* --- Alpha cards --- */
   document.getElementById('alpha-cards').innerHTML = alphas.map(a =>
     `<div class="alpha-card"><h3 style="color:${a.color};">${a.title}</h3><p>${a.desc}</p></div>`
   ).join('');
+}
+
+function buildAdditionsTable() {
+  const gt = {taxable:0,traditional:0,roth:0,dcp:0};
+  state.additions.forEach(a=>{gt.taxable+=a.taxable;gt.traditional+=a.traditional;gt.roth+=a.roth;gt.dcp+=a.dcp;});
+  const gtTotal = gt.taxable+gt.traditional+gt.roth+gt.dcp;
+
+  document.getElementById('additions-section').innerHTML = `
+    <table class="fund-table" style="margin-bottom:0;">
+      <thead><tr>
+        <th>Year</th>
+        <th style="color:var(--taxable-color);">Taxable</th>
+        <th style="color:var(--trad-color);">Traditional</th>
+        <th style="color:var(--roth-color);">Roth</th>
+        <th style="color:var(--dcp-color);">DCP</th>
+        <th>Year Total</th>
+      </tr></thead>
+      <tbody>
+        ${state.additions.map((a,i) => `
+          <tr>
+            <td style="color:var(--muted);font-family:'DM Mono',monospace;font-size:12px;">Year ${i+1}</td>
+            ${acctDefs.map(def => `
+              <td><input class="addition-input" value="${formatNum(a[def.key])}"
+                onchange="updateAddition(${i},'${def.key}',this.value)"
+                onkeydown="if(event.key==='Enter')this.blur()"></td>`).join('')}
+            <td id="add-row-${i}" style="font-family:'DM Mono',monospace;font-weight:600;">${fmtD(a.taxable+a.traditional+a.roth+a.dcp)}</td>
+          </tr>`).join('')}
+      </tbody>
+      <tfoot>
+        <tr style="border-top:2px solid var(--border);font-weight:700;">
+          <td style="color:var(--muted);font-size:12px;">4-Year Total</td>
+          <td id="gt-taxable"    style="font-family:'DM Mono',monospace;color:var(--taxable-color);">${fmtD(gt.taxable)}</td>
+          <td id="gt-traditional"style="font-family:'DM Mono',monospace;color:var(--trad-color);">${fmtD(gt.traditional)}</td>
+          <td id="gt-roth"       style="font-family:'DM Mono',monospace;color:var(--roth-color);">${fmtD(gt.roth)}</td>
+          <td id="gt-dcp"        style="font-family:'DM Mono',monospace;color:var(--dcp-color);">${fmtD(gt.dcp)}</td>
+          <td id="gt-total"      style="font-family:'DM Mono',monospace;">${fmtD(gtTotal)}</td>
+        </tr>
+      </tfoot>
+    </table>`;
+}
+
+function refreshSummaryMetrics() {
+  const base = stateBase(), add = stateTotalAdd();
+  document.getElementById('overview-metrics').innerHTML = `
+    <div class="metric-card"><div class="label">Total portfolio</div><div class="value accent" id="m-base">${fmtM(base)}</div></div>
+    <div class="metric-card"><div class="label">4-yr additions</div><div class="value accent2" id="m-add">${fmtM(add)}</div></div>
+    <div class="metric-card"><div class="label">Total capital</div><div class="value" id="m-total">${fmtM(base+add)}</div><div class="sub">30-year horizon</div></div>
+    <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">SCV tilt + DI + private credit</div></div>
+    <div class="metric-card"><div class="label">Blended ER</div><div class="value">0.31%</div></div>`;
+}
+
+function updateStateVal(key, val) {
+  state[key] = parseNum(val);
+  document.getElementById('p-'+key).value = formatNum(state[key]);
+  onPortfolioChange();
+}
+
+function updateAddition(yr, key, val) {
+  state.additions[yr][key] = parseNum(val);
+  const a = state.additions[yr];
+  document.getElementById('add-row-'+yr).textContent = fmtD(a.taxable+a.traditional+a.roth+a.dcp);
+  const gt = {taxable:0,traditional:0,roth:0,dcp:0};
+  state.additions.forEach(x=>{gt.taxable+=x.taxable;gt.traditional+=x.traditional;gt.roth+=x.roth;gt.dcp+=x.dcp;});
+  ['taxable','traditional','roth','dcp'].forEach(k=>{
+    const el=document.getElementById('gt-'+k); if(el) el.textContent=fmtD(gt[k]);
+  });
+  const el=document.getElementById('gt-total'); if(el) el.textContent=fmtD(gt.taxable+gt.traditional+gt.roth+gt.dcp);
+  onPortfolioChange();
+}
+
+function onPortfolioChange() {
+  document.getElementById('p-total').textContent = fmtM(stateBase());
+  const base=stateBase(), add=stateTotalAdd();
+  const mb=document.getElementById('m-base'), ma=document.getElementById('m-add'), mt=document.getElementById('m-total');
+  if(mb) mb.textContent=fmtM(base);
+  if(ma) ma.textContent=fmtM(add);
+  if(mt) mt.textContent=fmtM(base+add);
+  buildLocation();
+  updateRetirement();
 }
 
 /* ═══ LOCATION ═══ */
@@ -390,12 +567,27 @@ function buildLocation() {
     const t=f.loc==='Taxable'?f.weight+'%':'—', tr=f.loc==='Traditional'?f.weight+'%':'—', r=f.loc==='Roth'?f.weight+'%':'—';
     return `<tr><td class="ticker">${f.ticker}</td><td class="bucket-taxable">${t}</td><td class="bucket-trad">${tr}</td><td class="bucket-roth">${r}</td><td style="font-size:12px;color:var(--muted);">${f.rationale}</td></tr>`;
   }).join('');
+
   const years=[0,5,10,15,20,25,30], rate=0.08;
-  const maxT=(portfolio.base+portfolio.nqdc)*Math.pow(1+rate,30);
+  const maxT = stateBase() * Math.pow(1+rate, 30);
+
   document.getElementById('account-bars').innerHTML = years.map(y => {
-    const m=Math.pow(1+rate,y);
-    const tx=(portfolio.base*0.4)*m, tr=(portfolio.base*0.4+portfolio.nqdc)*m, ro=(portfolio.base*0.2)*m, tot=tx+tr+ro;
-    return `<div class="bar-row"><span class="bar-label">Year ${y}</span><div class="bar-track"><div class="bar-fill" style="width:${(tx/maxT*100).toFixed(1)}%;background:var(--taxable-color);"></div><div class="bar-fill" style="width:${(tr/maxT*100).toFixed(1)}%;background:var(--trad-color);"></div><div class="bar-fill" style="width:${(ro/maxT*100).toFixed(1)}%;background:var(--roth-color);"></div></div><span class="bar-value">$${(tot/1e6).toFixed(1)}M</span></div>`;
+    const m = Math.pow(1+rate, y);
+    const tx  = state.taxable     * m;
+    const tr  = state.traditional * m;
+    const ro  = state.roth        * m;
+    const dcp = state.dcp         * m;
+    const tot = tx+tr+ro+dcp;
+    return `<div class="bar-row">
+      <span class="bar-label">Year ${y}</span>
+      <div class="bar-track">
+        <div class="bar-fill" style="width:${(tx/maxT*100).toFixed(1)}%;background:var(--taxable-color);"></div>
+        <div class="bar-fill" style="width:${(tr/maxT*100).toFixed(1)}%;background:var(--trad-color);"></div>
+        <div class="bar-fill" style="width:${(ro/maxT*100).toFixed(1)}%;background:var(--roth-color);"></div>
+        <div class="bar-fill" style="width:${(dcp/maxT*100).toFixed(1)}%;background:var(--dcp-color);"></div>
+      </div>
+      <span class="bar-value">$${(tot/1e6).toFixed(1)}M</span>
+    </div>`;
   }).join('');
 }
 
@@ -404,7 +596,7 @@ function buildNQDC() {
   const sched=[100000,110000,120000,130000,140000,150000,160000,175000,185000,195000,200000,210000,215000,220000,290000];
   let cum=0;
   document.getElementById('nqdc-rows').innerHTML = sched.map((d,i) => {
-    cum+=d; const rem=portfolio.nqdc-cum;
+    cum+=d; const rem=state.dcp-cum;
     return `<tr><td>Year ${i+5}</td><td>${fmtD(d)}</td><td>${fmtD(cum)}</td><td style="color:${rem<=0?'var(--danger)':'var(--muted)'}">${fmtD(Math.max(0,rem))}</td></tr>`;
   }).join('');
 }
@@ -464,8 +656,6 @@ function solveTax(){
     <div class="tc-note">${tcFiling==='single'?'Single':'MFJ'} · 2025 brackets (OBBBA) · WA — no state tax · NIIT: ${fmtD(niitThr[tcFiling])} · Std ded: ${fmtD(sd)}</div>`;
 }
 
-function formatNum(n){return Math.round(n).toLocaleString();}
-function parseNum(s){return parseInt(s.replace(/[^0-9.-]/g,''),10)||0;}
 function syncFromSlider(id){document.getElementById(id+'Num').value=formatNum(+document.getElementById(id).value);solveTax();}
 function syncFromInput(id){const v=parseNum(document.getElementById(id+'Num').value);document.getElementById(id).value=v;document.getElementById(id+'Num').value=formatNum(v);solveTax();}
 function handleEnter(e,id){if(e.key==='Enter'){syncFromInput(id);e.target.blur();}}
@@ -484,7 +674,7 @@ function buildBurn() {
   const stages=[{name:'Stage 1',ages:'50–60',mult:1.0,color:'var(--accent3)'},{name:'Stage 2',ages:'60–70',mult:0.80,color:'var(--accent)'},{name:'Stage 3',ages:'70+',mult:0.60,color:'var(--accent2)'}];
   const totals=stages.map(s=>cats.reduce((sum,c)=>sum+c.s1*s.mult,0));
   const annuals=totals.map(t=>t*12);
-  const ret=portfolio.base*0.07;
+  const ret=stateBase()*0.07;
 
   document.getElementById('burn-cards').innerHTML=stages.map((s,i)=>
     `<div class="burn-card" style="border-color:${s.color}33;"><div class="stage-name" style="color:${s.color};">${s.name}</div><div style="font-size:10px;color:var(--muted);">${s.ages}</div><div class="stage-amt">${fmtD(totals[i])}<span style="font-size:10px;color:var(--muted);">/mo</span></div><div class="stage-sub">${fmtD(annuals[i])}/yr</div></div>`
@@ -528,9 +718,10 @@ function updateRetirement(){
 
   const netRet=engine==='factor'?0.078:0.082;
   const infRate=regime==='low'?0.02:regime==='moderate'?0.035:0.055;
+  const base=stateBase();
 
   document.getElementById('safemax-display').textContent=adj.toFixed(2)+'%';
-  const yr1=portfolio.base*adj/100;
+  const yr1=base*adj/100;
   const yr1at=yr1*(1-tax/100);
   document.getElementById('safemax-sub').textContent=`Universal: ${sm.toFixed(1)}% · Yr 1: ${fmtD(yr1)} · After tax: ${fmtD(yr1at)} · Monthly: ${fmtD(yr1at/12)} · Engine: ${engine==='factor'?'Factor 7.8%':'S&P 8.2%'}`;
 
@@ -551,7 +742,7 @@ function updateRetirement(){
   document.getElementById('cape-table').innerHTML=ct;
 
   // Projection
-  let bal=portfolio.base, wd=bal*adj/100;
+  let bal=base, wd=bal*adj/100;
   const rows=[];
   let maxW=0;
   for(let y=1;y<=horizon;y++){
@@ -564,17 +755,15 @@ function updateRetirement(){
     if(bal<=0){for(let f=y+1;f<=horizon;f++)rows.push({year:f,start:0,withdrawal:0,afterTax:0,end:0,cwr:0});break;}
   }
 
-  // Bars
   document.getElementById('retirement-bars').innerHTML=`
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:4px;">Annual withdrawals (COLA)</div>
     <div style="display:flex;align-items:flex-end;gap:1px;height:80px;margin-bottom:16px;">
       ${rows.map(y=>`<div style="flex:1;background:var(--accent3);border-radius:1px 1px 0 0;height:${maxW>0?y.withdrawal/maxW*100:0}%;opacity:0.8;min-height:${y.withdrawal>0?'1px':'0'};"></div>`).join('')}
     </div>`;
 
-  // Table
   let rt=`<thead><tr><th>Yr</th><th>Start</th><th>Withdrawal</th><th>After Tax</th><th>End Bal</th><th>CWR</th></tr></thead><tbody>`;
   rows.forEach(y=>{
-    rt+=`<tr><td>${y.year}</td><td>${fmtD(y.start)}</td><td style="color:var(--accent3);">${fmtD(y.withdrawal)}</td><td style="color:var(--accent2);">${fmtD(y.afterTax)}</td><td style="color:${y.end<portfolio.base*0.3?'var(--danger)':'var(--text)'};">${fmtD(y.end)}</td><td style="color:var(--muted);">${y.cwr.toFixed(1)}%</td></tr>`;
+    rt+=`<tr><td>${y.year}</td><td>${fmtD(y.start)}</td><td style="color:var(--accent3);">${fmtD(y.withdrawal)}</td><td style="color:var(--accent2);">${fmtD(y.afterTax)}</td><td style="color:${y.end<base*0.3?'var(--danger)':'var(--text)'};">${fmtD(y.end)}</td><td style="color:var(--muted);">${y.cwr.toFixed(1)}%</td></tr>`;
   });
   rt+=`</tbody>`;
   document.getElementById('retirement-table').innerHTML=rt;
