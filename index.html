@@ -240,15 +240,16 @@ body {
   <div id="tab-tax" class="tab-panel">
     <div class="section-title">Withdrawal sequencing</div>
     <div class="alpha-grid">
-      <div class="alpha-card"><h3 style="color:var(--taxable-color);">1. Taxable first</h3><p>Draw from brokerage first — long-term capital gains taxed at 0/15/20%. Step-up basis resets on death. Preserves tax-advantaged growth in IRA/Roth.</p></div>
-      <div class="alpha-card"><h3 style="color:var(--trad-color);">2. Traditional IRA — bracket-managed</h3><p>Strategic Roth conversions and draws to fill lower brackets. Avoid large RMDs that push into 32%+ brackets. Drain Traditional before 73 if possible.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--taxable-color);">1. Taxable — cap gains first</h3><p>Draw from brokerage first — long-term capital gains taxed at 0/15/20%. Step-up basis resets on death. Preserves tax-advantaged growth in IRA/Roth.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--trad-color);">2. Traditional IRA — bracket-managed</h3><p>Strategic Roth conversions and draws to fill lower brackets. Avoid large RMDs that push into 32%+ brackets. IRS mandates RMDs at age 73+ regardless of need.</p></div>
       <div class="alpha-card"><h3 style="color:var(--roth-color);">3. Roth — last resort</h3><p>Tax-free growth, no RMDs, tax-free to heirs. Touch last. Every year of compound growth in Roth is permanently tax-free.</p></div>
-      <div class="alpha-card"><h3 style="color:var(--danger);">4. NQDC — escalating draw</h3><p>$2.5M deferred comp drawn over 15 years in escalating schedule. Taxed as ordinary income. Exhausted by Year 19. Coordinate with IRA draws to manage brackets.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--dcp-color);">4. DCP / NQDC — mandatory installments</h3><p>DCP drawn over 10 installments starting at retirement. Taxed as ordinary income. Portfolio dividends (~2% of taxable) are also mandatory each year. Both non-discretionary — coordinate with bracket planning.</p></div>
     </div>
+    <div id="tax-alpha-timeline"></div>
     <div class="subsection" style="margin-top:24px;">
-      <div class="section-title">NQDC draw schedule</div>
+      <div class="section-title">DCP draw schedule (from age <span id="nqdc-age-label">50</span>)</div>
       <table class="nqdc-table">
-        <thead><tr><th>Year</th><th>Draw</th><th>Cumulative</th><th>Remaining</th></tr></thead>
+        <thead><tr><th>Year</th><th>Age</th><th>Balance Start</th><th>DCP Draw</th><th>Remaining</th><th>Growth</th><th>End Balance</th></tr></thead>
         <tbody id="nqdc-rows"></tbody>
       </table>
     </div>
@@ -638,6 +639,8 @@ function onPortfolioChange() {
   buildFundRows();
   buildLocation();
   updateRetirement();
+  buildNQDC();
+  buildTaxAlphaTimeline();
 }
 
 /* ═══ LOCATION ═══ */
@@ -708,14 +711,165 @@ function buildLocation() {
   }).join('');
 }
 
-/* ═══ NQDC ═══ */
+/* ═══ NQDC / DCP draw schedule ═══ */
 function buildNQDC() {
-  const sched=[100000,110000,120000,130000,140000,150000,160000,175000,185000,195000,200000,210000,215000,220000,290000];
-  let cum=0;
-  document.getElementById('nqdc-rows').innerHTML = sched.map((d,i) => {
-    cum+=d; const rem=state.dcp-cum;
-    return `<tr><td>Year ${i+5}</td><td>${fmtD(d)}</td><td>${fmtD(cum)}</td><td style="color:${rem<=0?'var(--danger)':'var(--muted)'}">${fmtD(Math.max(0,rem))}</td></tr>`;
-  }).join('');
+  const engine = document.getElementById('rEngine');
+  const netRet = engine && engine.value === 'sp500' ? 0.082 : 0.078;
+  const accumYears = Math.max(0, state.retireAge - state.currentAge);
+  /* Accumulate DCP from current age to retirement */
+  let bal = state.dcp;
+  for (let y = 0; y < accumYears; y++) {
+    if (y < state.additions.length) bal += state.additions[y].dcp;
+    bal *= (1 + netRet);
+  }
+  const lbl = document.getElementById('nqdc-age-label');
+  if (lbl) lbl.textContent = state.retireAge;
+  /* 10-installment algorithm (same as DCP model tab and retirement tab) */
+  const rows = [];
+  let instLeft = 10;
+  for (let i = 0; i < 10; i++) {
+    const age = state.retireAge + i;
+    const start = bal;
+    const draw = instLeft > 0 ? bal / instLeft : 0;
+    const remaining = Math.max(0, bal - draw);
+    const growth = remaining * netRet;
+    bal = remaining + growth;
+    instLeft--;
+    rows.push({year: i+1, age, start, draw, remaining, growth, end: bal});
+  }
+  document.getElementById('nqdc-rows').innerHTML = rows.map(r => `<tr>
+    <td style="font-family:'DM Mono',monospace;">${r.year}</td>
+    <td style="font-family:'DM Mono',monospace;font-weight:700;">${r.age}</td>
+    <td style="font-family:'DM Mono',monospace;">${fmtD(r.start)}</td>
+    <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;font-weight:600;">${fmtD(r.draw)}</td>
+    <td style="font-family:'DM Mono',monospace;">${fmtD(r.remaining)}</td>
+    <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.growth)}</td>
+    <td style="font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
+  </tr>`).join('');
+}
+
+/* ═══ TAX ALPHA TIMELINE ═══ */
+function buildTaxAlphaTimeline() {
+  const el = document.getElementById('tax-alpha-timeline');
+  if (!el) return;
+  const cape    = +document.getElementById('rCape').value;
+  const regime  = document.getElementById('rRegime').value;
+  const horizon = +document.getElementById('rHorizon').value;
+  const tax     = +document.getElementById('rTax').value;
+  const engine  = document.getElementById('rEngine').value;
+  const sm = getSafemax(cape, regime);
+  let adj = sm;
+  if (horizon < 30) adj += (30 - horizon) * 0.1;
+  if (horizon > 30) adj -= (horizon - 30) * 0.08;
+  adj = Math.max(adj, 2.5);
+  const netRet  = engine === 'sp500' ? 0.082 : 0.078;
+  const infRate = regime === 'low' ? 0.02 : regime === 'moderate' ? 0.035 : 0.055;
+  const DIV_YIELD = 0.02;
+
+  /* Phase 1: accumulate to retirement */
+  let balDCP = state.dcp, balTax = state.taxable, balTrad = state.traditional, balRoth = state.roth;
+  const accumYears = Math.max(0, state.retireAge - state.currentAge);
+  for (let y = 0; y < accumYears; y++) {
+    if (y < state.additions.length) {
+      const a = state.additions[y];
+      balTax += a.taxable; balTrad += a.traditional; balRoth += a.roth; balDCP += a.dcp;
+    }
+    balTax *= (1+netRet); balTrad *= (1+netRet); balRoth *= (1+netRet); balDCP *= (1+netRet);
+  }
+  const retPf = balDCP + balTax + balTrad + balRoth;
+  let wd = retPf * adj / 100;
+  let dcpInstLeft = 10;
+  const rows = [];
+
+  for (let y = 1; y <= horizon; y++) {
+    const age = state.retireAge + y - 1;
+
+    /* Mandatory 1: DCP installment */
+    let dcpDraw = 0;
+    if (dcpInstLeft > 0 && balDCP > 0) {
+      dcpDraw = balDCP / dcpInstLeft;
+      balDCP  = Math.max(0, balDCP - dcpDraw);
+      dcpInstLeft--;
+      balDCP *= (1 + netRet);
+    }
+
+    /* Mandatory 2: Portfolio dividends (2% on taxable balance) */
+    const divIncome = balTax * DIV_YIELD;
+    const mandatory = dcpDraw + divIncome;
+    /* DCP = ordinary income rate; dividends = LTCG (~half rate) */
+    const taxOnMandatory = dcpDraw * (tax/100) + divIncome * (tax/200);
+    const mandatoryNet   = mandatory - taxOnMandatory;
+
+    /* Voluntary additional draw to reach SAFEMAX target */
+    let needLeft = Math.max(0, wd - mandatory);
+    let addTax = 0, addTrad = 0, addRoth = 0;
+
+    addTax = Math.min(needLeft, Math.max(0, balTax));
+    balTax = Math.max(0, balTax - addTax);
+    needLeft -= addTax;
+
+    if (needLeft > 0 && age >= 60) {
+      addTrad  = Math.min(needLeft, Math.max(0, balTrad));
+      balTrad  = Math.max(0, balTrad - addTrad);
+      needLeft -= addTrad;
+    }
+    if (needLeft > 0) {
+      addRoth = Math.min(needLeft, Math.max(0, balRoth));
+      balRoth = Math.max(0, balRoth - addRoth);
+    }
+
+    const taxOnAdd  = addTax * (tax/200) + addTrad * (tax/100);
+    const totalGross = mandatory + addTax + addTrad + addRoth;
+    const totalTax   = taxOnMandatory + taxOnAdd;
+    const totalNet   = totalGross - totalTax;
+    const effRate    = totalGross > 0 ? totalTax / totalGross * 100 : 0;
+    let src = addTax > 0 ? 'Cap gains' : '';
+    if (addTrad > 0) src += (src ? ' + ' : '') + 'Traditional';
+    if (addRoth > 0) src += (src ? ' + ' : '') + 'Roth';
+    if (!src) src = 'Mand. only';
+
+    balTax  *= (1 + netRet);
+    balTrad *= (1 + netRet);
+    balRoth *= (1 + netRet);
+
+    rows.push({y, age, dcpDraw, divIncome, mandatory, taxOnMandatory, mandatoryNet,
+               addTax, addTrad, addRoth, taxOnAdd, totalGross, totalTax, totalNet, effRate, src});
+    wd *= (1 + infRate);
+  }
+
+  el.innerHTML = `
+    <div class="section-title" style="margin-top:28px;">Mandatory income + draw timeline — starting age ${state.retireAge}</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px;">DCP installments and portfolio dividends are non-optional taxable income. Voluntary draws (cap gains → Traditional 60+ → Roth) fill remaining SAFEMAX target.</p>
+    <div style="overflow-x:auto;">
+    <table class="nqdc-table" style="min-width:960px;">
+      <thead><tr>
+        <th>Yr</th><th>Age</th>
+        <th style="color:var(--dcp-color);">DCP Draw</th>
+        <th style="color:var(--accent3);">Dividends<br><small style="font-weight:400;">(2% of taxable)</small></th>
+        <th>Mandatory<br>Gross</th>
+        <th style="color:var(--danger);">Tax<br>(Mand.)</th>
+        <th style="color:var(--accent2);">Mandatory<br>After-Tax</th>
+        <th>Voluntary<br>Draw</th>
+        <th>Source</th>
+        <th style="color:var(--danger);">Total Tax</th>
+        <th style="color:var(--accent2);">Total<br>After-Tax</th>
+        <th>Eff Rate</th>
+      </tr></thead>
+      <tbody>${rows.map(r => `<tr>
+        <td style="font-family:'DM Mono',monospace;">${r.y}</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:700;">${r.age}</td>
+        <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;">${r.dcpDraw > 0 ? fmtD(r.dcpDraw) : '—'}</td>
+        <td style="color:var(--accent3);font-family:'DM Mono',monospace;">${fmtD(r.divIncome)}</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:600;">${fmtD(r.mandatory)}</td>
+        <td style="color:var(--danger);font-family:'DM Mono',monospace;">${fmtD(r.taxOnMandatory)}</td>
+        <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.mandatoryNet)}</td>
+        <td style="font-family:'DM Mono',monospace;">${fmtD(r.addTax + r.addTrad + r.addRoth)}</td>
+        <td style="font-size:11px;color:var(--muted);">${r.src}</td>
+        <td style="color:var(--danger);font-family:'DM Mono',monospace;">${fmtD(r.totalTax)}</td>
+        <td style="color:var(--accent2);font-family:'DM Mono',monospace;font-weight:600;">${fmtD(r.totalNet)}</td>
+        <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.effRate.toFixed(1)}%</td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
 }
 
 /* ═══ TAX CALC ═══ */
@@ -810,6 +964,7 @@ function buildBurn() {
    V3: RICHER RETIREMENT (BENGEN SAFEMAX)
    ═══════════════════════════════════════════════════════════════════ */
 const CAPE_TBL={low:{10:9.5,15:8.0,20:6.95,25:6.2,30:5.5,35:5.25,40:5.0,45:4.8},moderate:{10:8.5,15:7.2,20:6.5,25:5.8,30:5.25,35:5.0,40:4.8,45:4.7},high:{10:7.0,15:6.0,20:5.5,25:5.0,30:4.7,35:4.7,40:4.7,45:4.7}};
+const RMD_DIV={73:26.5,74:25.5,75:24.6,76:23.7,77:22.9,78:22.0,79:21.1,80:20.2,81:19.4,82:18.5,83:17.7,84:16.8,85:16.0,86:15.2,87:14.4,88:13.7,89:12.9,90:12.2,91:11.5,92:10.8,93:10.1,94:9.5};
 
 function getSafemax(cape,regime){
   const t=CAPE_TBL[regime],ks=Object.keys(t).map(Number).sort((a,b)=>a-b);
@@ -911,13 +1066,17 @@ function updateRetirement(){
     balTax = Math.max(0, balTax - taxDraw);
     need  -= taxDraw;
 
-    /* 3. Traditional 401k — age 60+ only per tax alpha sequencing */
+    /* 3. Traditional 401k — age 60+ voluntary; age 73+ IRS RMD mandatory floor */
     const tradLocked = age < 60;
-    let tradDraw = 0;
-    if (need > 0 && !tradLocked) {
-      tradDraw = Math.min(need, Math.max(0, balTrad));
+    let tradDraw = 0, isRMD = false;
+    if (!tradLocked && balTrad > 0) {
+      const rmdDiv = age >= 73 ? (RMD_DIV[Math.min(age, 94)] || 9.5) : 0;
+      const rmdMin = rmdDiv > 0 ? balTrad / rmdDiv : 0;
+      const voluntary = Math.min(need, Math.max(0, balTrad));
+      tradDraw = Math.min(Math.max(rmdMin, voluntary), Math.max(0, balTrad));
+      if (age >= 73 && rmdMin > 0) isRMD = true;
       balTrad  = Math.max(0, balTrad - tradDraw);
-      need    -= tradDraw;
+      need     = Math.max(0, need - tradDraw);
     }
 
     /* 4. Roth — last resort, tax-free */
@@ -938,7 +1097,7 @@ function updateRetirement(){
     const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
 
     rows.push({year:y, age, start:totalStart, dcpDraw, taxDraw, tradDraw, rothDraw,
-               totalDraw, afterTax, end:totalEnd, cwr, tradLocked});
+               totalDraw, afterTax, end:totalEnd, cwr, tradLocked, isRMD});
     if (totalDraw > maxW) maxW = totalDraw;
     wd *= (1 + infRate);
   }
@@ -975,7 +1134,7 @@ function updateRetirement(){
     <th>Yr</th><th>Age</th>
     <th style="color:var(--dcp-color);">DCP<br><small style="font-weight:400;font-size:10px;">10-yr installment</small></th>
     <th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;font-size:10px;">LTCG rate</small></th>
-    <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">age 60+ unlock</small></th>
+    <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">60+ voluntary · 73+ RMD</small></th>
     <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
     <th>Total Draw</th><th>After-Tax</th><th>End Balance</th><th>CWR</th>
   </tr></thead><tbody>`;
@@ -987,7 +1146,7 @@ function updateRetirement(){
       <td style="font-family:'DM Mono',monospace;font-weight:700;">${r.age}</td>
       <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;">${r.dcpDraw>0?fmtD(r.dcpDraw):'—'}</td>
       <td style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${r.taxDraw>0?fmtD(r.taxDraw):'—'}</td>
-      <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw):'—'}</td>
+      <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw)+(r.isRMD?' <span style="font-size:10px;color:var(--accent);">RMD</span>':''):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
@@ -1035,10 +1194,11 @@ function updateDCP(){
 /* ═══ INIT ═══ */
 buildOverview();
 buildLocation();
-buildNQDC();
 solveTax();
 buildBurn();
 updateRetirement();
+buildNQDC();
+buildTaxAlphaTimeline();
 /* Sync DCP model tab with portfolio state on startup */
 document.getElementById('dcpAmt').value = state.dcp;
 document.getElementById('dcpInst').value = 10;
