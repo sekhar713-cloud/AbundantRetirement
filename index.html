@@ -406,7 +406,7 @@ function showTab(id) {
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
 }
 
-function jumpToTaxCalc(dcpIncome, tradIncome, afterTaxTarget) {
+function jumpToTaxCalc(dcpIncome, tradIncome, divIncome, afterTaxTarget) {
   /* Navigate to Tax Calc tab */
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -426,7 +426,7 @@ function jumpToTaxCalc(dcpIncome, tradIncome, afterTaxTarget) {
   };
   setField('tcOrd',    dcpIncome);
   setField('tcTrad',   tradIncome);
-  setField('tcDiv',    0);
+  setField('tcDiv',    divIncome);
   setField('tcTarget', afterTaxTarget);
   solveTax();
 }
@@ -1103,9 +1103,6 @@ function updateRetirement(){
   /* Update hero with retirement-date balance */
   document.getElementById('safemax-display').textContent = adj.toFixed(2) + '%';
   const yr1 = retirePortfolio * adj / 100;
-  const yr1at = yr1 * (1 - tax/100);
-  document.getElementById('safemax-sub').textContent =
-    `SAFEMAX ${sm.toFixed(1)}% · Retire age ${state.retireAge} · Balance at retirement: ${fmtM(retirePortfolio)} · Yr-1 draw: ${fmtD(yr1)} · After-tax: ${fmtD(yr1at)} · Monthly: ${fmtD(yr1at/12)}`;
 
   /* ── Phase 2: Distribute from retireAge ────────────────────────
      Priority: DCP (10-yr installment algo) → Taxable (LTCG)
@@ -1121,7 +1118,7 @@ function updateRetirement(){
     const totalStart = balDCP + balTax + balTrad + balRoth;
     if (totalStart <= 0) {
       for (let f = y; f <= horizon; f++)
-        rows.push({year:f, age:state.retireAge+f-1, start:0, dcpDraw:0, taxDraw:0, tradDraw:0, rothDraw:0, totalDraw:0, afterTax:0, end:0, cwr:0, tradLocked:false});
+        rows.push({year:f, age:state.retireAge+f-1, start:0, dcpDraw:0, divIncome:0, taxDraw:0, tradDraw:0, rothDraw:0, totalDraw:0, totalIncome:0, afterTax:0, taxPaid:0, end:0, cwr:0, tradLocked:false, isRMD:false});
       break;
     }
 
@@ -1134,14 +1131,18 @@ function updateRetirement(){
       dcpInstLeft--;
       balDCP   *= (1 + netRet);   // remaining DCP compounds between installments
     }
-    let need = Math.max(0, wd - dcpDraw);
+    /* 2. Qualified dividends — 2% of taxable balance, mandatory, LTCG-taxed */
+    const divIncome = balTax * 0.02;
 
-    /* 2. Taxable — available at any age; LTCG treatment */
+    /* Remaining spend target after mandatory DCP + dividends */
+    let need = Math.max(0, wd - dcpDraw - divIncome);
+
+    /* 3. Taxable cap gains withdrawal */
     const taxDraw = Math.min(need, Math.max(0, balTax));
     balTax = Math.max(0, balTax - taxDraw);
     need  -= taxDraw;
 
-    /* 3. Traditional 401k — age 60+ voluntary; age 73+ IRS RMD mandatory floor */
+    /* 4. Traditional 401k — 60+ voluntary; 73+ IRS RMD mandatory floor */
     const tradLocked = age < 60;
     let tradDraw = 0, isRMD = false;
     if (!tradLocked && balTrad > 0) {
@@ -1154,28 +1155,43 @@ function updateRetirement(){
       need     = Math.max(0, need - tradDraw);
     }
 
-    /* 4. Roth — last resort, tax-free */
+    /* 5. Roth — last resort, tax-free */
     const rothDraw = Math.min(need, Math.max(0, balRoth));
     balRoth = Math.max(0, balRoth - rothDraw);
 
-    const totalDraw = dcpDraw + taxDraw + tradDraw + rothDraw;
-    /* After-tax: DCP/Trad = ordinary rate; Taxable = LTCG (~half); Roth = 0 */
-    const afterTax = (dcpDraw + tradDraw) * (1 - tax/100)
-                   + taxDraw              * (1 - tax/200)
-                   + rothDraw;
+    /* ── Exact tax using same bracket functions as Tax Calc tab ──────
+       ordIncome  (DCP + Traditional) = ordinary income brackets
+       ltcgIncome (ETF dividends + cap gains) = qualified / LTCG rate  */
+    const ordIncome  = dcpDraw + tradDraw;
+    const ltcgIncome = divIncome + taxDraw;
+    const retTaxOrd  = Math.max(0, ordIncome - stdDed[tcFiling]);
+    const oTax       = ordTax(retTaxOrd);
+    const cgTax      = cgTaxCalc(retTaxOrd, ltcgIncome);
+    const nTax       = niit(ordIncome + ltcgIncome, ltcgIncome);
+    const taxPaid    = oTax + cgTax + nTax;
+    const afterTax   = ordIncome + ltcgIncome + rothDraw - taxPaid;
+    const totalIncome = ordIncome + ltcgIncome + rothDraw; // ≈ wd
+    const totalDraw   = dcpDraw + taxDraw + tradDraw + rothDraw; // portfolio withdrawals
 
-    balTax  *= (1 + netRet);
+    /* Taxable: price-only return since dividends are paid out as cash */
+    balTax  *= (1 + netRet - 0.02);
     balTrad *= (1 + netRet);
     balRoth *= (1 + netRet);
 
     const totalEnd = balDCP + balTax + balTrad + balRoth;
     const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
 
-    const taxPaid = totalDraw - afterTax;
-    rows.push({year:y, age, start:totalStart, dcpDraw, taxDraw, tradDraw, rothDraw,
-               totalDraw, afterTax, taxPaid, end:totalEnd, cwr, tradLocked, isRMD});
-    if (totalDraw > maxW) maxW = totalDraw;
+    rows.push({year:y, age, start:totalStart, dcpDraw, divIncome, taxDraw, tradDraw, rothDraw,
+               totalDraw, totalIncome, afterTax, taxPaid, end:totalEnd, cwr, tradLocked, isRMD});
+    if (totalIncome > maxW) maxW = totalIncome;
     wd *= (1 + infRate);
+  }
+
+  /* Hero subtext — use exact bracket tax from year 1 */
+  if (rows.length > 0) {
+    const r0 = rows[0];
+    document.getElementById('safemax-sub').textContent =
+      `SAFEMAX ${sm.toFixed(1)}% · Retire age ${state.retireAge} · Balance at retirement: ${fmtM(retirePortfolio)} · Yr-1 draw: ${fmtD(r0.totalIncome)} · After-tax: ${fmtD(r0.afterTax)} · Monthly: ${fmtD(r0.afterTax/12)}`;
   }
 
   /* Stacked bar */
@@ -1185,19 +1201,23 @@ function updateRetirement(){
     </div>
     <div class="legend" style="margin-bottom:6px;">
       <span class="legend-item"><span class="legend-dot" style="background:var(--dcp-color);"></span>DCP (10-yr installment)</span>
-      <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Taxable (LTCG)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--accent3);"></span>Dividends (2% taxable)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Cap Gains (LTCG)</span>
       <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional (age 60+)</span>
       <span class="legend-item"><span class="legend-dot" style="background:var(--roth-color);"></span>Roth (last resort)</span>
     </div>
     <div style="display:flex;align-items:flex-end;gap:1px;height:80px;margin-bottom:16px;">
       ${rows.map(r => {
-        const h = maxW > 0 ? r.totalDraw / maxW * 100 : 0;
-        const dp = r.totalDraw > 0 ? r.dcpDraw  / r.totalDraw * 100 : 0;
-        const tp = r.totalDraw > 0 ? r.taxDraw  / r.totalDraw * 100 : 0;
-        const rp = r.totalDraw > 0 ? r.tradDraw / r.totalDraw * 100 : 0;
-        const op = r.totalDraw > 0 ? r.rothDraw / r.totalDraw * 100 : 0;
-        return `<div style="flex:1;height:${h}%;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden;min-height:${r.totalDraw>0?'1px':'0'};">
+        const h = maxW > 0 ? r.totalIncome / maxW * 100 : 0;
+        const tot = r.totalIncome || 1;
+        const dp = r.dcpDraw   / tot * 100;
+        const dv = r.divIncome / tot * 100;
+        const tp = r.taxDraw   / tot * 100;
+        const rp = r.tradDraw  / tot * 100;
+        const op = r.rothDraw  / tot * 100;
+        return `<div style="flex:1;height:${h}%;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden;min-height:${r.totalIncome>0?'1px':'0'};">
           <div style="height:${dp}%;background:var(--dcp-color);"></div>
+          <div style="height:${dv}%;background:var(--accent3);"></div>
           <div style="height:${tp}%;background:var(--taxable-color);"></div>
           <div style="height:${rp}%;background:var(--trad-color);"></div>
           <div style="height:${op}%;background:var(--roth-color);"></div>
@@ -1209,10 +1229,11 @@ function updateRetirement(){
   let rt = `<thead><tr>
     <th>Yr</th><th>Age</th>
     <th style="color:var(--dcp-color);">DCP<br><small style="font-weight:400;font-size:10px;">10-yr installment</small></th>
-    <th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;font-size:10px;">LTCG rate</small></th>
+    <th style="color:var(--accent3);">Dividends<br><small style="font-weight:400;font-size:10px;">2% taxable, LTCG</small></th>
+    <th style="color:var(--taxable-color);">Cap Gains<br><small style="font-weight:400;font-size:10px;">LTCG rate</small></th>
     <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">60+ voluntary · 73+ RMD</small></th>
     <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
-    <th>Total Draw</th>
+    <th>Total Income</th>
     <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → Tax Calc</small></th>
     <th>After-Tax</th><th>End Balance</th><th>CWR</th>
   </tr></thead><tbody>`;
@@ -1223,11 +1244,12 @@ function updateRetirement(){
       <td style="font-family:'DM Mono',monospace;">${r.year}</td>
       <td style="font-family:'DM Mono',monospace;font-weight:700;">${r.age}</td>
       <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;">${r.dcpDraw>0?fmtD(r.dcpDraw):'—'}</td>
+      <td style="color:var(--accent3);font-family:'DM Mono',monospace;">${fmtD(r.divIncome)}</td>
       <td style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${r.taxDraw>0?fmtD(r.taxDraw):'—'}</td>
       <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw)+(r.isRMD?' <span style="font-size:10px;color:var(--accent);">RMD</span>':''):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
-      <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
-      <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.dcpDraw)},${Math.round(r.tradDraw)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's income breakdown">${fmtD(r.taxPaid)}</td>
+      <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalIncome)}</td>
+      <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.dcpDraw)},${Math.round(r.tradDraw)},${Math.round(r.divIncome)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's income breakdown">${fmtD(r.taxPaid)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
       <td style="color:${warn?'var(--danger)':'var(--text)'};font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
       <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.cwr.toFixed(1)}%</td>
