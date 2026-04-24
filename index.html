@@ -185,6 +185,23 @@ body {
 .tax-link:hover { color: var(--accent2) !important; }
 .tax-row-hl { background: rgba(91,141,238,0.18) !important; }
 .tax-row-fade { background: transparent !important; transition: background 1.6s ease; }
+
+.burn-input {
+  width: 86px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: inherit;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  padding: 3px 6px;
+  text-align: right;
+  outline: none;
+  box-sizing: border-box;
+}
+.burn-input:focus { border-color: var(--accent); }
+.surplus-pos { color: var(--accent2); }
+.surplus-neg { color: var(--danger); }
 </style>
 </head>
 <body>
@@ -1010,29 +1027,68 @@ function setFiling(f){tcFiling=f;document.querySelectorAll('.filing-btn').forEac
 /* ═══════════════════════════════════════════════════════════════════
    V3: BURN STAGES
    ═══════════════════════════════════════════════════════════════════ */
-function buildBurn() {
-  const cats=[
-    {name:'Housing (mortgage/tax/ins)',s1:5000},{name:'Healthcare / Insurance',s1:2500},{name:'Taxes (est. quarterly)',s1:4000},
-    {name:'Food & Groceries',s1:2000},{name:'Utilities & Services',s1:800},{name:'Transportation / Auto',s1:1500},
-    {name:'Personal / Grooming',s1:500},{name:'Entertainment / Dining',s1:2000},{name:'Kids / Education',s1:3000},
-    {name:'Charitable Giving',s1:1500},{name:'Miscellaneous / Buffer',s1:1200},{name:'Travel',s1:8000},
-  ];
-  const stages=[{name:'Stage 1',ages:'50–60',mult:1.0,color:'var(--accent3)'},{name:'Stage 2',ages:'60–70',mult:0.80,color:'var(--accent)'},{name:'Stage 3',ages:'70+',mult:0.60,color:'var(--accent2)'}];
-  const totals=stages.map(s=>cats.reduce((sum,c)=>sum+c.s1*s.mult,0));
-  const annuals=totals.map(t=>t*12);
-  const ret=stateBase()*0.07;
+/* ── Burn stage state — persists across re-renders ──────────────── */
+const burnState = {cats: [
+  {name:'Housing (mortgage/tax/ins)', s1:5000, s2:4000,  s3:3000},
+  {name:'Healthcare / Insurance',     s1:2500, s2:2000,  s3:1500},
+  {name:'Taxes (est. quarterly)',     s1:4000, s2:3200,  s3:2400},
+  {name:'Food & Groceries',           s1:2000, s2:1600,  s3:1200},
+  {name:'Utilities & Services',       s1:800,  s2:640,   s3:480},
+  {name:'Transportation / Auto',      s1:1500, s2:1200,  s3:900},
+  {name:'Personal / Grooming',        s1:500,  s2:400,   s3:300},
+  {name:'Entertainment / Dining',     s1:2000, s2:1600,  s3:1200},
+  {name:'Kids / Education',           s1:3000, s2:2400,  s3:1800},
+  {name:'Charitable Giving',          s1:1500, s2:1200,  s3:900},
+  {name:'Miscellaneous / Buffer',     s1:1200, s2:960,   s3:720},
+  {name:'Travel',                     s1:8000, s2:6400,  s3:4800},
+]};
 
-  document.getElementById('burn-cards').innerHTML=stages.map((s,i)=>
-    `<div class="burn-card" style="border-color:${s.color}33;"><div class="stage-name" style="color:${s.color};">${s.name}</div><div style="font-size:10px;color:var(--muted);">${s.ages}</div><div class="stage-amt">${fmtD(totals[i])}<span style="font-size:10px;color:var(--muted);">/mo</span></div><div class="stage-sub">${fmtD(annuals[i])}/yr</div></div>`
+function burnUpdate(i, key, val) {
+  burnState.cats[i][key] = Math.max(0, +val || 0);
+  buildBurn();
+  updateRetirement();
+}
+
+function buildBurn() {
+  const stages = [
+    {name:'Stage 1', ages:'50–60', key:'s1', color:'var(--accent3)'},
+    {name:'Stage 2', ages:'60–70', key:'s2', color:'var(--accent)'},
+    {name:'Stage 3', ages:'70+',   key:'s3', color:'var(--accent2)'},
+  ];
+  const totals  = stages.map(s => burnState.cats.reduce((sum,c) => sum + c[s.key], 0));
+  const annuals = totals.map(t => t * 12);
+
+  document.getElementById('burn-cards').innerHTML = stages.map((s,i) =>
+    `<div class="burn-card" style="border-color:${s.color}33;">
+       <div class="stage-name" style="color:${s.color};">${s.name}</div>
+       <div style="font-size:10px;color:var(--muted);">${s.ages}</div>
+       <div class="stage-amt">${fmtD(totals[i])}<span style="font-size:10px;color:var(--muted);">/mo</span></div>
+       <div class="stage-sub">${fmtD(annuals[i])}/yr</div>
+     </div>`
   ).join('');
 
-  let tbl=`<thead><tr><th>Category</th>${stages.map(s=>`<th style="color:${s.color};">${s.name}</th>`).join('')}</tr></thead><tbody>`;
-  cats.forEach(c=>{tbl+=`<tr><td>${c.name}</td>${stages.map(s=>`<td style="font-family:'DM Mono',monospace;color:${s.color};">${fmtD(c.s1*s.mult)}</td>`).join('')}</tr>`;});
-  tbl+=`<tr style="border-top:2px solid var(--border);font-weight:700;"><td>Monthly Total</td>${totals.map((t,i)=>`<td style="font-family:'DM Mono',monospace;color:${stages[i].color};">${fmtD(t)}</td>`).join('')}</tr>`;
-  tbl+=`<tr style="font-weight:700;"><td>Annual Total</td>${annuals.map((a,i)=>`<td style="font-family:'DM Mono',monospace;color:${stages[i].color};">${fmtD(a)}</td>`).join('')}</tr></tbody>`;
-  document.getElementById('burn-table').innerHTML=tbl;
+  let tbl = `<thead><tr>
+    <th>Category (monthly)</th>
+    ${stages.map(s=>`<th style="color:${s.color};">${s.name}<br><small style="font-weight:400;font-size:10px;">${s.ages}</small></th>`).join('')}
+  </tr></thead><tbody>`;
+  burnState.cats.forEach((c,i) => {
+    tbl += `<tr><td>${c.name}</td>${stages.map(s =>
+      `<td><input type="number" class="burn-input" value="${c[s.key]}"
+         onchange="burnUpdate(${i},'${s.key}',this.value)"
+         style="color:${s.color};"></td>`
+    ).join('')}</tr>`;
+  });
+  tbl += `<tr style="border-top:2px solid var(--border);font-weight:700;">
+    <td>Monthly Total</td>${totals.map((t,i)=>`<td style="font-family:'DM Mono',monospace;color:${stages[i].color};">${fmtD(t)}</td>`).join('')}</tr>`;
+  tbl += `<tr style="font-weight:700;">
+    <td>Annual Total</td>${annuals.map((a,i)=>`<td style="font-family:'DM Mono',monospace;color:${stages[i].color};">${fmtD(a)}</td>`).join('')}</tr></tbody>`;
+  document.getElementById('burn-table').innerHTML = tbl;
 
-  document.getElementById('burn-runway').innerHTML=`Portfolio generates <strong style="color:var(--accent3);">${fmtD(ret)}/yr</strong> at 7% returns. Even at peak Stage 1 burn of ${fmtD(annuals[0])}/yr, surplus of <strong style="color:var(--accent3);">${fmtD(ret-annuals[0])}/yr</strong>. Portfolio grows in all stages. Runway: <strong>infinite</strong> on current assumptions.`;
+  document.getElementById('burn-runway').innerHTML =
+    `Stage 1 annual target: <strong style="color:var(--accent3);">${fmtD(annuals[0])}/yr</strong>
+     &nbsp;·&nbsp; Stage 2: <strong style="color:var(--accent);">${fmtD(annuals[1])}/yr</strong>
+     &nbsp;·&nbsp; Stage 3: <strong style="color:var(--accent2);">${fmtD(annuals[2])}/yr</strong>
+     &nbsp;·&nbsp; Edit any cell — retirement table updates automatically.`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1107,6 +1163,11 @@ function updateRetirement(){
   /* ── Phase 2: Distribute from retireAge ────────────────────────
      Priority: DCP (10-yr installment algo) → Taxable (LTCG)
                → Traditional (age 60+) → Roth (last resort)     */
+  /* Burn needs — year-1 nominal per stage, inflated within each stage */
+  const s1Annual = burnState.cats.reduce((s,c) => s + c.s1 * 12, 0);
+  const s2Annual = burnState.cats.reduce((s,c) => s + c.s2 * 12, 0);
+  const s3Annual = burnState.cats.reduce((s,c) => s + c.s3 * 12, 0);
+
   const DCP_INSTALLMENTS = 10;
   let dcpInstLeft = DCP_INSTALLMENTS;
   let wd = retirePortfolio * adj / 100;
@@ -1118,7 +1179,7 @@ function updateRetirement(){
     const totalStart = balDCP + balTax + balTrad + balRoth;
     if (totalStart <= 0) {
       for (let f = y; f <= horizon; f++)
-        rows.push({year:f, age:state.retireAge+f-1, start:0, dcpDraw:0, divIncome:0, taxDraw:0, tradDraw:0, rothDraw:0, totalDraw:0, totalIncome:0, afterTax:0, taxPaid:0, end:0, cwr:0, tradLocked:false, isRMD:false});
+        rows.push({year:f, age:state.retireAge+f-1, start:0, dcpDraw:0, divIncome:0, taxDraw:0, tradDraw:0, rothDraw:0, totalDraw:0, totalIncome:0, afterTax:0, taxPaid:0, burnNeed:0, surplus:0, extraEquity:0, end:0, cwr:0, tradLocked:false, isRMD:false});
       break;
     }
 
@@ -1137,8 +1198,8 @@ function updateRetirement(){
     /* Remaining spend target after mandatory DCP + dividends */
     let need = Math.max(0, wd - dcpDraw - divIncome);
 
-    /* 3. Taxable cap gains withdrawal */
-    const taxDraw = Math.min(need, Math.max(0, balTax));
+    /* 3. Taxable cap gains withdrawal (base — may grow below if deficit) */
+    let taxDraw = Math.min(need, Math.max(0, balTax));
     balTax = Math.max(0, balTax - taxDraw);
     need  -= taxDraw;
 
@@ -1163,15 +1224,50 @@ function updateRetirement(){
        ordIncome  (DCP + Traditional) = ordinary income brackets
        ltcgIncome (ETF dividends + cap gains) = qualified / LTCG rate  */
     const ordIncome  = dcpDraw + tradDraw;
-    const ltcgIncome = divIncome + taxDraw;
+    let ltcgIncome   = divIncome + taxDraw;
     const retTaxOrd  = Math.max(0, ordIncome - stdDed[tcFiling]);
     const oTax       = ordTax(retTaxOrd);
-    const cgTax      = cgTaxCalc(retTaxOrd, ltcgIncome);
-    const nTax       = niit(ordIncome + ltcgIncome, ltcgIncome);
-    const taxPaid    = oTax + cgTax + nTax;
-    const afterTax   = ordIncome + ltcgIncome + rothDraw - taxPaid;
-    const totalIncome = ordIncome + ltcgIncome + rothDraw; // ≈ wd
-    const totalDraw   = dcpDraw + taxDraw + tradDraw + rothDraw; // portfolio withdrawals
+    let cgTax        = cgTaxCalc(retTaxOrd, ltcgIncome);
+    let nTax         = niit(ordIncome + ltcgIncome, ltcgIncome);
+    let taxPaid      = oTax + cgTax + nTax;
+    let afterTax     = ordIncome + ltcgIncome + rothDraw - taxPaid;
+    let totalIncome  = ordIncome + ltcgIncome + rothDraw;
+    let totalDraw    = dcpDraw + taxDraw + tradDraw + rothDraw;
+
+    /* ── Burn need for this year (inflation resets at each stage start) */
+    const yr0       = y - 1;  // 0-based year index
+    const stg       = yr0 < 10 ? 0 : yr0 < 20 ? 1 : 2;
+    const stgAnnual = [s1Annual, s2Annual, s3Annual][stg];
+    const stgStart  = stg === 0 ? 0 : stg === 1 ? 10 : 20;
+    const burnNeed  = stgAnnual * Math.pow(1 + infRate, yr0 - stgStart);
+
+    /* ── Deficit fill — sell extra taxable equity if after-tax < burn need */
+    let extraEquity = 0;
+    if (afterTax < burnNeed && balTax > 0) {
+      const shortfall = burnNeed - afterTax;
+      let lo = 0, hi = Math.min(shortfall * 5, balTax);
+      for (let bi = 0; bi < 50; bi++) {
+        const mid = (lo + hi) / 2;
+        const tryLTCG = ltcgIncome + mid;
+        const tryCG   = cgTaxCalc(retTaxOrd, tryLTCG);
+        const tryN    = niit(ordIncome + tryLTCG, tryLTCG);
+        const tryAt   = ordIncome + tryLTCG + rothDraw - oTax - tryCG - tryN;
+        if (tryAt < burnNeed) lo = mid; else hi = mid;
+      }
+      extraEquity = Math.min(Math.ceil((lo + hi) / 2), balTax);
+      if (extraEquity > 0) {
+        balTax     = Math.max(0, balTax - extraEquity);
+        taxDraw   += extraEquity;
+        ltcgIncome += extraEquity;
+        cgTax      = cgTaxCalc(retTaxOrd, ltcgIncome);
+        nTax       = niit(ordIncome + ltcgIncome, ltcgIncome);
+        taxPaid    = oTax + cgTax + nTax;
+        afterTax   = ordIncome + ltcgIncome + rothDraw - taxPaid;
+        totalIncome = ordIncome + ltcgIncome + rothDraw;
+        totalDraw   = dcpDraw + taxDraw + tradDraw + rothDraw;
+      }
+    }
+    const surplus = afterTax - burnNeed;
 
     /* Taxable: price-only return since dividends are paid out as cash */
     balTax  *= (1 + netRet - 0.02);
@@ -1182,7 +1278,8 @@ function updateRetirement(){
     const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
 
     rows.push({year:y, age, start:totalStart, dcpDraw, divIncome, taxDraw, tradDraw, rothDraw,
-               totalDraw, totalIncome, afterTax, taxPaid, end:totalEnd, cwr, tradLocked, isRMD});
+               totalDraw, totalIncome, afterTax, taxPaid, burnNeed, surplus, extraEquity,
+               end:totalEnd, cwr, tradLocked, isRMD});
     if (totalIncome > maxW) maxW = totalIncome;
     wd *= (1 + infRate);
   }
@@ -1235,7 +1332,10 @@ function updateRetirement(){
     <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
     <th>Total Income</th>
     <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → Tax Calc</small></th>
-    <th>After-Tax</th><th>End Balance</th><th>CWR</th>
+    <th>After-Tax</th>
+    <th style="color:var(--accent3);">Burn Need<br><small style="font-weight:400;font-size:10px;">infl-adj target</small></th>
+    <th>Surplus / Deficit<br><small style="font-weight:400;font-size:10px;">after-tax vs burn</small></th>
+    <th>End Balance</th><th>CWR</th>
   </tr></thead><tbody>`;
 
   rows.forEach(r => {
@@ -1251,6 +1351,8 @@ function updateRetirement(){
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalIncome)}</td>
       <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.dcpDraw)},${Math.round(r.tradDraw)},${Math.round(r.divIncome)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's income breakdown">${fmtD(r.taxPaid)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
+      <td style="color:var(--accent3);font-family:'DM Mono',monospace;">${fmtD(r.burnNeed)}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${r.surplus>=0?'surplus-pos':'surplus-neg'}">${r.surplus>=0?'+':''}${fmtD(r.surplus)}${r.extraEquity>0?` <span style="font-size:10px;opacity:0.7;">+${fmtD(r.extraEquity)} equity sold</span>`:''}</td>
       <td style="color:${warn?'var(--danger)':'var(--text)'};font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
       <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.cwr.toFixed(1)}%</td>
     </tr>`;
