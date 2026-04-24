@@ -205,7 +205,7 @@ body {
     <div class="subsection">
       <div class="section-title">Fund allocation — SCV tilt + direct indexing</div>
       <table class="fund-table">
-        <thead><tr><th>Fund</th><th>Ticker</th><th>Weight</th><th>$ Allocated</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
+        <thead><tr><th>Fund</th><th>Ticker</th><th>Within-Account</th><th>Portfolio %</th><th>$ Allocated</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
         <tbody id="fund-rows"></tbody>
       </table>
     </div>
@@ -220,7 +220,7 @@ body {
     <div class="section-title">Tax location strategy</div>
     <div class="subsection">
       <table class="fund-table">
-        <thead><tr><th>Fund</th><th>Taxable</th><th>Traditional</th><th>Roth</th><th>Rationale</th></tr></thead>
+        <thead><tr><th>Ticker</th><th>Fund</th><th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;">(% of acct / $)</small></th><th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;">(% of acct / $)</small></th><th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;">(% of acct / $)</small></th><th>Rationale</th></tr></thead>
         <tbody id="location-rows"></tbody>
       </table>
     </div>
@@ -397,15 +397,15 @@ function showTab(id) {
    STATE — editable portfolio balances & annual additions
    ═══════════════════════════════════════════════════════════════════ */
 const state = {
-  taxable:     4000000,
-  traditional: 4000000,
-  roth:        2000000,
-  dcp:         2500000,
+  taxable:     7600000,
+  traditional: 2100000,
+  roth:         200000,
+  dcp:         1100000,
   additions: [
-    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
-    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
-    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
-    {taxable:1800000, traditional:500000, roth:100000, dcp:100000},
+    {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
+    {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
+    {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
+    {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
   ],
 };
 
@@ -415,13 +415,15 @@ function stateTotalAdd() { return state.additions.reduce((s,a) => s+a.taxable+a.
 /* ═══════════════════════════════════════════════════════════════════
    V1 STATIC DATA
    ═══════════════════════════════════════════════════════════════════ */
+/* withinAcct: % of that account's balance allocated to this fund.
+   Must sum to 100% per account (Taxable, Traditional, Roth). */
 const funds = [
-  {name:'Direct Index US Large Value',ticker:'DI-AVLV',weight:15,er:'0.20%',cat:'US Large Value',loc:'Taxable',rationale:'Direct indexing replaces ETF — daily TLH, FTC-eligible'},
-  {name:'Avantis US Small Cap Value',ticker:'AVUV',weight:30,er:'0.25%',cat:'US Small Value',loc:'Traditional',rationale:'SCV tilt to 30% — dominant factor premium, sheltered'},
-  {name:'Direct Index Intl Value',ticker:'DI-DFIV',weight:10,er:'0.30%',cat:'Intl Value',loc:'Taxable',rationale:'Direct indexing intl — FTC recovery + systematic TLH'},
-  {name:'Avantis Intl Small Cap Value',ticker:'AVDV',weight:25,er:'0.36%',cat:'Intl Small Value',loc:'Traditional',rationale:'SCV tilt to 25% — high yield sheltered'},
-  {name:'Avantis EM Value',ticker:'AVES',weight:15,er:'0.36%',cat:'EM Value',loc:'Roth',rationale:'Highest volatility + growth — tax-free compounding in Roth'},
-  {name:'Private Credit Fund',ticker:'PRIV-CR',weight:5,er:'0.85%',cat:'Private Credit',loc:'Traditional',rationale:'Illiquidity premium, 8-10% yield sheltered from ordinary tax'},
+  {name:'Direct Index US Large Value', ticker:'DI-AVLV', withinAcct:60,   er:0.20, cat:'US Large Value',   loc:'Taxable',     rationale:'Direct indexing — daily TLH on individual lots, FTC-eligible'},
+  {name:'Direct Index Intl Value',     ticker:'DI-DFIV', withinAcct:40,   er:0.30, cat:'Intl Value',       loc:'Taxable',     rationale:'Direct indexing intl — FTC recovery + systematic TLH'},
+  {name:'Avantis US Small Cap Value',  ticker:'AVUV',    withinAcct:50,   er:0.25, cat:'US Small Value',   loc:'Traditional', rationale:'SCV tilt — dominant factor premium, sheltered from tax'},
+  {name:'Avantis Intl Small Cap Value',ticker:'AVDV',    withinAcct:41.7, er:0.36, cat:'Intl Small Value', loc:'Traditional', rationale:'Intl SCV — high yield sheltered from ordinary income tax'},
+  {name:'Private Credit Fund',         ticker:'PRIV-CR', withinAcct:8.3,  er:0.85, cat:'Private Credit',   loc:'Traditional', rationale:'Illiquidity premium, 8-10% yield sheltered from ordinary tax'},
+  {name:'Avantis EM Value',            ticker:'AVES',    withinAcct:100,  er:0.36, cat:'EM Value',         loc:'Roth',        rationale:'Highest growth + volatility — tax-free compounding in Roth'},
 ];
 
 const alphas = [
@@ -435,6 +437,21 @@ const fmtD = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
 const fmtM = n => '$'+(n/1e6).toFixed(2)+'M';
 function formatNum(n){return Math.round(n).toLocaleString();}
 function parseNum(s){return parseInt(String(s).replace(/[^0-9.-]/g,''),10)||0;}
+
+/* Fund helpers — derive dollars & portfolio % from live account balances */
+function acctBal(loc) {
+  return loc==='Taxable' ? state.taxable : loc==='Traditional' ? state.traditional : state.roth;
+}
+function fundDollars(f)      { return (f.withinAcct / 100) * acctBal(f.loc); }
+function fundPortfolioPct(f) {
+  const inv = state.taxable + state.traditional + state.roth;
+  return inv > 0 ? fundDollars(f) / inv * 100 : 0;
+}
+function blendedER() {
+  const inv = state.taxable + state.traditional + state.roth;
+  if (inv <= 0) return 0;
+  return funds.reduce((s, f) => s + f.er * fundDollars(f), 0) / inv;
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    OVERVIEW — editable portfolio + additions
@@ -480,22 +497,42 @@ function buildOverview() {
 }
 
 function buildFundRows() {
-  const total = stateBase();
-  /* Per-location account pools so we can show which bucket each fund draws from */
-  const acctBal = {Taxable: state.taxable, Traditional: state.traditional, Roth: state.roth};
-  document.getElementById('fund-rows').innerHTML = funds.map(f => {
-    const bc = f.loc==='Taxable'?'bucket-taxable':f.loc==='Traditional'?'bucket-trad':'bucket-roth';
-    const dollars = (f.weight / 100) * total;
+  const investable = state.taxable + state.traditional + state.roth;
+  /* Group totals per account to show how much of each account is allocated */
+  const acctTotals = {Taxable:0, Traditional:0, Roth:0};
+  funds.forEach(f => { acctTotals[f.loc] += fundDollars(f); });
+
+  const rows = funds.map(f => {
+    const bc      = f.loc==='Taxable'?'bucket-taxable':f.loc==='Traditional'?'bucket-trad':'bucket-roth';
+    const dollars = fundDollars(f);
+    const portPct = fundPortfolioPct(f);
     return `<tr>
       <td>${f.name}</td>
       <td class="ticker">${f.ticker}</td>
-      <td>${f.weight}%</td>
+      <td style="font-family:'DM Mono',monospace;" class="${bc}">${f.withinAcct.toFixed(1)}% of ${f.loc}</td>
+      <td style="font-family:'DM Mono',monospace;">${portPct.toFixed(1)}%</td>
       <td style="font-family:'DM Mono',monospace;font-weight:600;">${fmtD(dollars)}</td>
-      <td>${f.er}</td>
+      <td>${f.er.toFixed(2)}%</td>
       <td>${f.cat}</td>
       <td class="${bc}">${f.loc}</td>
     </tr>`;
   }).join('');
+
+  /* Account subtotal footer */
+  const footer = `<tr style="border-top:2px solid var(--border);font-size:12px;">
+    <td colspan="2" style="color:var(--muted);">Account totals (investable)</td>
+    <td></td><td></td>
+    <td style="font-family:'DM Mono',monospace;">
+      <span style="color:var(--taxable-color);">Taxable ${fmtD(acctTotals.Taxable)}</span>&nbsp;
+      <span style="color:var(--trad-color);">Trad ${fmtD(acctTotals.Traditional)}</span>&nbsp;
+      <span style="color:var(--roth-color);">Roth ${fmtD(acctTotals.Roth)}</span>
+    </td>
+    <td style="font-family:'DM Mono',monospace;color:var(--muted);">${blendedER().toFixed(2)}%</td>
+    <td style="color:var(--muted);">Blended ER</td>
+    <td></td>
+  </tr>`;
+
+  document.getElementById('fund-rows').innerHTML = rows + footer;
 }
 
 function buildAdditionsTable() {
@@ -544,7 +581,7 @@ function refreshSummaryMetrics() {
     <div class="metric-card"><div class="label">4-yr additions</div><div class="value accent2" id="m-add">${fmtM(add)}</div></div>
     <div class="metric-card"><div class="label">Total capital</div><div class="value" id="m-total">${fmtM(base+add)}</div><div class="sub">30-year horizon</div></div>
     <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">SCV tilt + DI + private credit</div></div>
-    <div class="metric-card"><div class="label">Blended ER</div><div class="value">0.31%</div></div>`;
+    <div class="metric-card"><div class="label">Blended ER</div><div class="value">${blendedER().toFixed(2)}%</div></div>`;
 }
 
 function updateStateVal(key, val) {
@@ -580,10 +617,35 @@ function onPortfolioChange() {
 
 /* ═══ LOCATION ═══ */
 function buildLocation() {
-  document.getElementById('location-rows').innerHTML = funds.map(f => {
-    const t=f.loc==='Taxable'?f.weight+'%':'—', tr=f.loc==='Traditional'?f.weight+'%':'—', r=f.loc==='Roth'?f.weight+'%':'—';
-    return `<tr><td class="ticker">${f.ticker}</td><td class="bucket-taxable">${t}</td><td class="bucket-trad">${tr}</td><td class="bucket-roth">${r}</td><td style="font-size:12px;color:var(--muted);">${f.rationale}</td></tr>`;
+  /* Build location table with within-account % + dollar amount per fund */
+  const locRows = funds.map(f => {
+    const dollars = fundDollars(f);
+    const cell = (loc) => {
+      if (f.loc !== loc) return `<td style="color:var(--muted);text-align:center;">—</td>`;
+      const color = loc==='Taxable'?'var(--taxable-color)':loc==='Traditional'?'var(--trad-color)':'var(--roth-color)';
+      return `<td>
+        <div style="color:${color};font-family:'DM Mono',monospace;font-weight:600;">${f.withinAcct.toFixed(1)}%</div>
+        <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;">${fmtD(dollars)}</div>
+      </td>`;
+    };
+    return `<tr>
+      <td class="ticker">${f.ticker}</td>
+      <td style="font-size:12px;">${f.name}</td>
+      ${cell('Taxable')}${cell('Traditional')}${cell('Roth')}
+      <td style="font-size:12px;color:var(--muted);">${f.rationale}</td>
+    </tr>`;
   }).join('');
+
+  /* Account total footer row */
+  const locFooter = `<tr style="border-top:2px solid var(--border);font-weight:700;">
+    <td colspan="2" style="color:var(--muted);font-size:12px;">Account total</td>
+    <td><div style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${fmtD(state.taxable)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
+    <td><div style="color:var(--trad-color);font-family:'DM Mono',monospace;">${fmtD(state.traditional)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
+    <td><div style="color:var(--roth-color);font-family:'DM Mono',monospace;">${fmtD(state.roth)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
+    <td style="font-size:12px;color:var(--muted);">DCP/NQDC: ${fmtD(state.dcp)} — separate vehicle</td>
+  </tr>`;
+
+  document.getElementById('location-rows').innerHTML = locRows + locFooter;
 
   const years=[0,5,10,15,20,25,30], rate=0.08;
   const maxT = stateBase() * Math.pow(1+rate, 30);
