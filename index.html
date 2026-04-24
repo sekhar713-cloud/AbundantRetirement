@@ -175,6 +175,16 @@ body {
 }
 .addition-input:hover { border-color: var(--border); }
 .addition-input:focus { border-color: var(--accent); background: var(--surface2); }
+
+.tax-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.tax-link:hover { color: var(--accent2) !important; }
+.tax-row-hl { background: rgba(91,141,238,0.18) !important; }
+.tax-row-fade { background: transparent !important; transition: background 1.6s ease; }
 </style>
 </head>
 <body>
@@ -218,9 +228,10 @@ body {
   <!-- ═══ LOCATION ALPHA (V1) ═══ -->
   <div id="tab-location" class="tab-panel">
     <div class="section-title">Tax location strategy</div>
+    <p id="loc-retire-subtitle" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></p>
     <div class="subsection">
       <table class="fund-table">
-        <thead><tr><th>Ticker</th><th>Fund</th><th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;">(% of acct / $)</small></th><th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;">(% of acct / $)</small></th><th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;">(% of acct / $)</small></th><th>Rationale</th></tr></thead>
+        <thead><tr><th>Ticker</th><th>Fund</th><th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;">(% of acct / $ at retire)</small></th><th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;">(% of acct / $ at retire)</small></th><th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;">(% of acct / $ at retire)</small></th><th>Rationale</th></tr></thead>
         <tbody id="location-rows"></tbody>
       </table>
     </div>
@@ -392,6 +403,21 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   const idx = tabDefs.findIndex(t => t[0]===id);
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
+}
+
+function jumpToTaxRow(year) {
+  showTab('tax');
+  setTimeout(() => {
+    const el = document.getElementById('tax-yr-' + year);
+    if (!el) return;
+    el.scrollIntoView({behavior:'smooth', block:'center'});
+    el.style.background = 'rgba(91,141,238,0.22)';
+    el.style.transition = '';
+    setTimeout(() => {
+      el.style.transition = 'background 1.8s ease';
+      el.style.background = '';
+    }, 1200);
+  }, 60);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -645,9 +671,30 @@ function onPortfolioChange() {
 
 /* ═══ LOCATION ═══ */
 function buildLocation() {
-  /* Build location table with within-account % + dollar amount per fund */
+  /* Project balances from current age to retireAge using same return as retirement tab */
+  const locEngine  = document.getElementById('rEngine');
+  const locNetRet  = locEngine && locEngine.value === 'sp500' ? 0.082 : 0.078;
+  const locAccumYr = Math.max(0, state.retireAge - state.currentAge);
+  let retTax = state.taxable, retTrad = state.traditional, retRoth = state.roth, retDCP = state.dcp;
+  for (let y = 0; y < locAccumYr; y++) {
+    if (y < state.additions.length) {
+      const a = state.additions[y];
+      retTax += a.taxable; retTrad += a.traditional; retRoth += a.roth; retDCP += a.dcp;
+    }
+    retTax  *= (1 + locNetRet); retTrad *= (1 + locNetRet);
+    retRoth *= (1 + locNetRet); retDCP  *= (1 + locNetRet);
+  }
+
+  /* Update subtitle */
+  const sub = document.getElementById('loc-retire-subtitle');
+  if (sub) sub.textContent = `Dollar allocations projected at retirement (age ${state.retireAge}) · ${(locNetRet*100).toFixed(1)}% annual return · ${locAccumYr}-yr accumulation`;
+
+  /* Helper: retirement-date dollar for a fund */
+  const retAcctBal = loc => loc==='Taxable'?retTax:loc==='Traditional'?retTrad:retRoth;
+
+  /* Build location table with within-account % + retirement-date dollar amount */
   const locRows = funds.map(f => {
-    const dollars = fundDollars(f);
+    const dollars = (f.withinAcct/100) * retAcctBal(f.loc);
     const cell = (loc) => {
       if (f.loc !== loc) return `<td style="color:var(--muted);text-align:center;">—</td>`;
       const color = loc==='Taxable'?'var(--taxable-color)':loc==='Traditional'?'var(--trad-color)':'var(--roth-color)';
@@ -664,13 +711,13 @@ function buildLocation() {
     </tr>`;
   }).join('');
 
-  /* Account total footer row */
+  /* Account total footer row — retirement-date balances */
   const locFooter = `<tr style="border-top:2px solid var(--border);font-weight:700;">
-    <td colspan="2" style="color:var(--muted);font-size:12px;">Account total</td>
-    <td><div style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${fmtD(state.taxable)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
-    <td><div style="color:var(--trad-color);font-family:'DM Mono',monospace;">${fmtD(state.traditional)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
-    <td><div style="color:var(--roth-color);font-family:'DM Mono',monospace;">${fmtD(state.roth)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
-    <td style="font-size:12px;color:var(--muted);">DCP/NQDC: ${fmtD(state.dcp)} — separate vehicle</td>
+    <td colspan="2" style="color:var(--muted);font-size:12px;">At retirement (age ${state.retireAge})</td>
+    <td><div style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${fmtD(retTax)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
+    <td><div style="color:var(--trad-color);font-family:'DM Mono',monospace;">${fmtD(retTrad)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
+    <td><div style="color:var(--roth-color);font-family:'DM Mono',monospace;">${fmtD(retRoth)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
+    <td style="font-size:12px;color:var(--muted);">DCP/NQDC: ${fmtD(retDCP)} — separate vehicle</td>
   </tr>`;
 
   document.getElementById('location-rows').innerHTML = locRows + locFooter;
@@ -855,7 +902,7 @@ function buildTaxAlphaTimeline() {
         <th style="color:var(--accent2);">Total<br>After-Tax</th>
         <th>Eff Rate</th>
       </tr></thead>
-      <tbody>${rows.map(r => `<tr>
+      <tbody>${rows.map(r => `<tr id="tax-yr-${r.y}" style="transition:background 1.6s ease;">
         <td style="font-family:'DM Mono',monospace;">${r.y}</td>
         <td style="font-family:'DM Mono',monospace;font-weight:700;">${r.age}</td>
         <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;">${r.dcpDraw > 0 ? fmtD(r.dcpDraw) : '—'}</td>
@@ -1096,8 +1143,9 @@ function updateRetirement(){
     const totalEnd = balDCP + balTax + balTrad + balRoth;
     const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
 
+    const taxPaid = totalDraw - afterTax;
     rows.push({year:y, age, start:totalStart, dcpDraw, taxDraw, tradDraw, rothDraw,
-               totalDraw, afterTax, end:totalEnd, cwr, tradLocked, isRMD});
+               totalDraw, afterTax, taxPaid, end:totalEnd, cwr, tradLocked, isRMD});
     if (totalDraw > maxW) maxW = totalDraw;
     wd *= (1 + infRate);
   }
@@ -1136,7 +1184,9 @@ function updateRetirement(){
     <th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;font-size:10px;">LTCG rate</small></th>
     <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">60+ voluntary · 73+ RMD</small></th>
     <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
-    <th>Total Draw</th><th>After-Tax</th><th>End Balance</th><th>CWR</th>
+    <th>Total Draw</th>
+    <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → breakdown</small></th>
+    <th>After-Tax</th><th>End Balance</th><th>CWR</th>
   </tr></thead><tbody>`;
 
   rows.forEach(r => {
@@ -1149,6 +1199,7 @@ function updateRetirement(){
       <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw)+(r.isRMD?' <span style="font-size:10px;color:var(--accent);">RMD</span>':''):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
+      <td class="tax-link" onclick="jumpToTaxRow(${r.year})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to see tax breakdown in Tax Alpha tab">${fmtD(r.taxPaid)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
       <td style="color:${warn?'var(--danger)':'var(--text)'};font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
       <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.cwr.toFixed(1)}%</td>
