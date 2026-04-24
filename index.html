@@ -401,6 +401,8 @@ const state = {
   traditional: 2100000,
   roth:         200000,
   dcp:         1100000,
+  currentAge:  47,
+  retireAge:   50,
   additions: [
     {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
     {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
@@ -478,6 +480,23 @@ function buildOverview() {
       <div class="metric-card">
         <div class="label">Total starting</div>
         <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(stateBase())}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+      <div class="metric-card" style="flex:0 0 160px;">
+        <div class="label">Current Age</div>
+        <input class="portfolio-val-input" id="p-currentAge" value="${state.currentAge}"
+          onchange="updateStateVal('currentAge',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      </div>
+      <div class="metric-card" style="flex:0 0 160px;">
+        <div class="label">Retire Age</div>
+        <input class="portfolio-val-input" id="p-retireAge" value="${state.retireAge}"
+          onchange="updateStateVal('retireAge',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+      </div>
+      <div class="metric-card" style="flex:1;min-width:160px;">
+        <div class="label">Accumulation window</div>
+        <div class="value accent" id="p-accumYears" style="font-size:28px;">${state.retireAge - state.currentAge} yrs</div>
+        <div class="sub">Ages ${state.currentAge}–${state.retireAge - 1} · then SAFEMAX withdrawals</div>
       </div>
     </div>`;
 
@@ -610,6 +629,12 @@ function onPortfolioChange() {
   if(mb) mb.textContent=fmtM(base);
   if(ma) ma.textContent=fmtM(add);
   if(mt) mt.textContent=fmtM(base+add);
+  /* Age display */
+  const ay=document.getElementById('p-accumYears');
+  if(ay){ const yrs=state.retireAge-state.currentAge; ay.textContent=yrs+' yrs'; ay.nextElementSibling.textContent=`Ages ${state.currentAge}–${state.retireAge-1} · then SAFEMAX withdrawals`; }
+  /* Sync DCP model tab deferral amount from portfolio state */
+  const dcpEl=document.getElementById('dcpAmt');
+  if(dcpEl){ dcpEl.value=state.dcp; updateDCP(); }
   buildFundRows();
   buildLocation();
   updateRetirement();
@@ -647,25 +672,38 @@ function buildLocation() {
 
   document.getElementById('location-rows').innerHTML = locRows + locFooter;
 
-  const years=[0,5,10,15,20,25,30], rate=0.08;
-  const maxT = stateBase() * Math.pow(1+rate, 30);
+  /* Account growth bars — 10.5% CAGR (SPY +0.5%), year-by-year with additions in accumulation phase */
+  const CAGR = 0.105;
+  const snapYears = [0, 5, 10, 15, 20, 25, 30];
+  let tx = state.taxable, tr = state.traditional, ro = state.roth, dcp = state.dcp;
+  const snapshots = [{year:0, tx, tr, ro, dcp}];
 
-  document.getElementById('account-bars').innerHTML = years.map(y => {
-    const m = Math.pow(1+rate, y);
-    const tx  = state.taxable     * m;
-    const tr  = state.traditional * m;
-    const ro  = state.roth        * m;
-    const dcp = state.dcp         * m;
-    const tot = tx+tr+ro+dcp;
-    return `<div class="bar-row">
-      <span class="bar-label">Year ${y}</span>
+  for (let y = 1; y <= 30; y++) {
+    /* Add annual contributions for each year they occur (beginning of year) */
+    if (y <= state.additions.length) {
+      const a = state.additions[y-1];
+      tx += a.taxable; tr += a.traditional; ro += a.roth; dcp += a.dcp;
+    }
+    tx *= (1+CAGR); tr *= (1+CAGR); ro *= (1+CAGR); dcp *= (1+CAGR);
+    if (snapYears.includes(y)) snapshots.push({year:y, tx, tr, ro, dcp});
+  }
+
+  const last = snapshots[snapshots.length-1];
+  const maxTot = last.tx + last.tr + last.ro + last.dcp;
+
+  document.getElementById('account-bars').innerHTML = snapshots.map(s => {
+    const tot = s.tx + s.tr + s.ro + s.dcp;
+    const age = state.currentAge + s.year;
+    const isRetire = age === state.retireAge;
+    return `<div class="bar-row" style="${isRetire?'padding:4px 0;border-top:1px dashed var(--accent);':''}">
+      <span class="bar-label" style="min-width:115px;${isRetire?'color:var(--accent);':''}">${isRetire?'▶ ':''}Yr ${s.year} · Age ${age}</span>
       <div class="bar-track">
-        <div class="bar-fill" style="width:${(tx/maxT*100).toFixed(1)}%;background:var(--taxable-color);"></div>
-        <div class="bar-fill" style="width:${(tr/maxT*100).toFixed(1)}%;background:var(--trad-color);"></div>
-        <div class="bar-fill" style="width:${(ro/maxT*100).toFixed(1)}%;background:var(--roth-color);"></div>
-        <div class="bar-fill" style="width:${(dcp/maxT*100).toFixed(1)}%;background:var(--dcp-color);"></div>
+        <div class="bar-fill" style="width:${maxTot>0?(s.tx/maxTot*100).toFixed(1):0}%;background:var(--taxable-color);"></div>
+        <div class="bar-fill" style="width:${maxTot>0?(s.tr/maxTot*100).toFixed(1):0}%;background:var(--trad-color);"></div>
+        <div class="bar-fill" style="width:${maxTot>0?(s.ro/maxTot*100).toFixed(1):0}%;background:var(--roth-color);"></div>
+        <div class="bar-fill" style="width:${maxTot>0?(s.dcp/maxTot*100).toFixed(1):0}%;background:var(--dcp-color);"></div>
       </div>
-      <span class="bar-value">$${(tot/1e6).toFixed(1)}M</span>
+      <span class="bar-value" style="${isRetire?'color:var(--accent);':''}">$${(tot/1e6).toFixed(1)}M${isRetire?' ← retire':''}</span>
     </div>`;
   }).join('');
 }
@@ -797,14 +835,8 @@ function updateRetirement(){
 
   const netRet=engine==='factor'?0.078:0.082;
   const infRate=regime==='low'?0.02:regime==='moderate'?0.035:0.055;
-  const base=stateBase();
 
-  document.getElementById('safemax-display').textContent=adj.toFixed(2)+'%';
-  const yr1=base*adj/100;
-  const yr1at=yr1*(1-tax/100);
-  document.getElementById('safemax-sub').textContent=`Universal: ${sm.toFixed(1)}% · Yr 1: ${fmtD(yr1)} · After tax: ${fmtD(yr1at)} · Monthly: ${fmtD(yr1at/12)} · Engine: ${engine==='factor'?'Factor 7.8%':'S&P 8.2%'}`;
-
-  // CAPE table
+  /* CAPE table */
   let ct=`<thead><tr><th>CAPE</th><th>Low</th><th>Moderate</th><th>High</th></tr></thead><tbody>`;
   [10,15,20,25,30,35,40,45].forEach(c=>{
     const hi=Math.abs(c-cape)<3;
@@ -820,50 +852,84 @@ function updateRetirement(){
   ct+=`</tbody>`;
   document.getElementById('cape-table').innerHTML=ct;
 
-  // Per-account balances — withdrawal priority: DCP → Taxable → Traditional → Roth
+  /* ── Phase 1: Accumulate from currentAge to retireAge ──────────── */
   let balDCP  = state.dcp;
   let balTax  = state.taxable;
   let balTrad = state.traditional;
   let balRoth = state.roth;
-  let wd = base * adj / 100; // Year-1 withdrawal (SAFEMAX × total portfolio)
+  const accumYears = Math.max(0, state.retireAge - state.currentAge);
 
+  for (let y = 0; y < accumYears; y++) {
+    if (y < state.additions.length) {
+      const a = state.additions[y];
+      balTax += a.taxable; balTrad += a.traditional;
+      balRoth += a.roth;   balDCP  += a.dcp;
+    }
+    balTax  *= (1 + netRet); balTrad *= (1 + netRet);
+    balRoth *= (1 + netRet); balDCP  *= (1 + netRet);
+  }
+  const retirePortfolio = balDCP + balTax + balTrad + balRoth;
+
+  /* Update hero with retirement-date balance */
+  document.getElementById('safemax-display').textContent = adj.toFixed(2) + '%';
+  const yr1 = retirePortfolio * adj / 100;
+  const yr1at = yr1 * (1 - tax/100);
+  document.getElementById('safemax-sub').textContent =
+    `SAFEMAX ${sm.toFixed(1)}% · Retire age ${state.retireAge} · Balance at retirement: ${fmtM(retirePortfolio)} · Yr-1 draw: ${fmtD(yr1)} · After-tax: ${fmtD(yr1at)} · Monthly: ${fmtD(yr1at/12)}`;
+
+  /* ── Phase 2: Distribute from retireAge ────────────────────────
+     Priority: DCP (10-yr installment algo) → Taxable (LTCG)
+               → Traditional (age 60+) → Roth (last resort)     */
+  const DCP_INSTALLMENTS = 10;
+  let dcpInstLeft = DCP_INSTALLMENTS;
+  let wd = retirePortfolio * adj / 100;
   const rows = [];
   let maxW = 0;
 
   for (let y = 1; y <= horizon; y++) {
+    const age = state.retireAge + y - 1;
     const totalStart = balDCP + balTax + balTrad + balRoth;
     if (totalStart <= 0) {
       for (let f = y; f <= horizon; f++)
-        rows.push({year:f,start:0,dcpDraw:0,taxDraw:0,tradDraw:0,rothDraw:0,totalDraw:0,afterTax:0,end:0,cwr:0});
+        rows.push({year:f, age:state.retireAge+f-1, start:0, dcpDraw:0, taxDraw:0, tradDraw:0, rothDraw:0, totalDraw:0, afterTax:0, end:0, cwr:0, tradLocked:false});
       break;
     }
 
-    let need = wd;
+    /* 1. DCP — installment algorithm matching DCP model tab:
+          each year distribute 1/(remaining installments) of balance */
+    let dcpDraw = 0;
+    if (dcpInstLeft > 0 && balDCP > 0) {
+      dcpDraw   = balDCP / dcpInstLeft;
+      balDCP    = Math.max(0, balDCP - dcpDraw);
+      dcpInstLeft--;
+      balDCP   *= (1 + netRet);   // remaining DCP compounds between installments
+    }
+    let need = Math.max(0, wd - dcpDraw);
 
-    // 1. DCP first (ordinary income tax)
-    const dcpDraw  = Math.min(need, Math.max(0, balDCP));
-    balDCP  = Math.max(0, balDCP  - dcpDraw);  need -= dcpDraw;
+    /* 2. Taxable — available at any age; LTCG treatment */
+    const taxDraw = Math.min(need, Math.max(0, balTax));
+    balTax = Math.max(0, balTax - taxDraw);
+    need  -= taxDraw;
 
-    // 2. Taxable (LTCG — half effective rate)
-    const taxDraw  = Math.min(need, Math.max(0, balTax));
-    balTax  = Math.max(0, balTax  - taxDraw);  need -= taxDraw;
+    /* 3. Traditional 401k — age 60+ only per tax alpha sequencing */
+    const tradLocked = age < 60;
+    let tradDraw = 0;
+    if (need > 0 && !tradLocked) {
+      tradDraw = Math.min(need, Math.max(0, balTrad));
+      balTrad  = Math.max(0, balTrad - tradDraw);
+      need    -= tradDraw;
+    }
 
-    // 3. Traditional (ordinary income tax)
-    const tradDraw = Math.min(need, Math.max(0, balTrad));
-    balTrad = Math.max(0, balTrad - tradDraw); need -= tradDraw;
-
-    // 4. Roth last (tax-free)
+    /* 4. Roth — last resort, tax-free */
     const rothDraw = Math.min(need, Math.max(0, balRoth));
     balRoth = Math.max(0, balRoth - rothDraw);
 
     const totalDraw = dcpDraw + taxDraw + tradDraw + rothDraw;
-    // After-tax: DCP & Trad at full rate, Taxable at LTCG (~half), Roth = 0
+    /* After-tax: DCP/Trad = ordinary rate; Taxable = LTCG (~half); Roth = 0 */
     const afterTax = (dcpDraw + tradDraw) * (1 - tax/100)
-                   + taxDraw * (1 - tax/200)
+                   + taxDraw              * (1 - tax/200)
                    + rothDraw;
 
-    // Grow remaining balances
-    balDCP  *= (1 + netRet);
     balTax  *= (1 + netRet);
     balTrad *= (1 + netRet);
     balRoth *= (1 + netRet);
@@ -871,55 +937,57 @@ function updateRetirement(){
     const totalEnd = balDCP + balTax + balTrad + balRoth;
     const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
 
-    rows.push({year:y, start:totalStart, dcpDraw, taxDraw, tradDraw, rothDraw, totalDraw, afterTax, end:totalEnd, cwr,
-               endDCP:balDCP, endTax:balTax, endTrad:balTrad, endRoth:balRoth});
+    rows.push({year:y, age, start:totalStart, dcpDraw, taxDraw, tradDraw, rothDraw,
+               totalDraw, afterTax, end:totalEnd, cwr, tradLocked});
     if (totalDraw > maxW) maxW = totalDraw;
     wd *= (1 + infRate);
   }
 
-  // Withdrawal source stacked bar (colour-coded by account)
+  /* Stacked bar */
   document.getElementById('retirement-bars').innerHTML = `
-    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:6px;">Annual withdrawals by source — priority: DCP → Taxable → Traditional → Roth</div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:6px;">
+      Withdrawals from age ${state.retireAge} — DCP installments → Taxable → Traditional (60+) → Roth
+    </div>
     <div class="legend" style="margin-bottom:6px;">
-      <span class="legend-item"><span class="legend-dot" style="background:var(--dcp-color);"></span>DCP</span>
-      <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Taxable</span>
-      <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional</span>
-      <span class="legend-item"><span class="legend-dot" style="background:var(--roth-color);"></span>Roth</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--dcp-color);"></span>DCP (10-yr installment)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Taxable (LTCG)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional (age 60+)</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--roth-color);"></span>Roth (last resort)</span>
     </div>
     <div style="display:flex;align-items:flex-end;gap:1px;height:80px;margin-bottom:16px;">
       ${rows.map(r => {
         const h = maxW > 0 ? r.totalDraw / maxW * 100 : 0;
-        const dcpPct  = r.totalDraw > 0 ? r.dcpDraw  / r.totalDraw * 100 : 0;
-        const taxPct  = r.totalDraw > 0 ? r.taxDraw  / r.totalDraw * 100 : 0;
-        const tradPct = r.totalDraw > 0 ? r.tradDraw / r.totalDraw * 100 : 0;
-        const rothPct = r.totalDraw > 0 ? r.rothDraw / r.totalDraw * 100 : 0;
+        const dp = r.totalDraw > 0 ? r.dcpDraw  / r.totalDraw * 100 : 0;
+        const tp = r.totalDraw > 0 ? r.taxDraw  / r.totalDraw * 100 : 0;
+        const rp = r.totalDraw > 0 ? r.tradDraw / r.totalDraw * 100 : 0;
+        const op = r.totalDraw > 0 ? r.rothDraw / r.totalDraw * 100 : 0;
         return `<div style="flex:1;height:${h}%;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden;min-height:${r.totalDraw>0?'1px':'0'};">
-          <div style="height:${dcpPct}%;background:var(--dcp-color);"></div>
-          <div style="height:${taxPct}%;background:var(--taxable-color);"></div>
-          <div style="height:${tradPct}%;background:var(--trad-color);"></div>
-          <div style="height:${rothPct}%;background:var(--roth-color);"></div>
+          <div style="height:${dp}%;background:var(--dcp-color);"></div>
+          <div style="height:${tp}%;background:var(--taxable-color);"></div>
+          <div style="height:${rp}%;background:var(--trad-color);"></div>
+          <div style="height:${op}%;background:var(--roth-color);"></div>
         </div>`;
       }).join('')}
     </div>`;
 
+  /* Table */
   let rt = `<thead><tr>
-    <th>Yr</th>
-    <th style="color:var(--dcp-color);">DCP Draw</th>
-    <th style="color:var(--taxable-color);">Taxable Draw</th>
-    <th style="color:var(--trad-color);">Trad Draw</th>
-    <th style="color:var(--roth-color);">Roth Draw</th>
-    <th>Total Draw</th>
-    <th>After-Tax</th>
-    <th>End Balance</th>
-    <th>CWR</th>
+    <th>Yr</th><th>Age</th>
+    <th style="color:var(--dcp-color);">DCP<br><small style="font-weight:400;font-size:10px;">10-yr installment</small></th>
+    <th style="color:var(--taxable-color);">Taxable<br><small style="font-weight:400;font-size:10px;">LTCG rate</small></th>
+    <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">age 60+ unlock</small></th>
+    <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
+    <th>Total Draw</th><th>After-Tax</th><th>End Balance</th><th>CWR</th>
   </tr></thead><tbody>`;
+
   rows.forEach(r => {
-    const warn = r.end < base * 0.3;
+    const warn = r.end < retirePortfolio * 0.3;
     rt += `<tr>
-      <td>${r.year}</td>
+      <td style="font-family:'DM Mono',monospace;">${r.year}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:700;">${r.age}</td>
       <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;">${r.dcpDraw>0?fmtD(r.dcpDraw):'—'}</td>
       <td style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${r.taxDraw>0?fmtD(r.taxDraw):'—'}</td>
-      <td style="color:var(--trad-color);font-family:'DM Mono',monospace;">${r.tradDraw>0?fmtD(r.tradDraw):'—'}</td>
+      <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
@@ -971,6 +1039,9 @@ buildNQDC();
 solveTax();
 buildBurn();
 updateRetirement();
+/* Sync DCP model tab with portfolio state on startup */
+document.getElementById('dcpAmt').value = state.dcp;
+document.getElementById('dcpInst').value = 10;
 updateDCP();
 </script>
 </body>
