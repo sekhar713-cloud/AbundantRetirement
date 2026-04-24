@@ -287,9 +287,10 @@ body {
           <button class="filing-btn active" onclick="setFiling('single')">Single</button>
           <button class="filing-btn" onclick="setFiling('mfj')">Married filing jointly</button>
         </div>
+        <div class="input-group"><label>DCP / NQDC income</label><div class="input-row"><input type="range" min="0" max="1000000" step="5000" value="200000" id="tcOrd" oninput="syncFromSlider('tcOrd')"><input type="text" class="num-input" id="tcOrdNum" value="200,000" onchange="syncFromInput('tcOrd')" onkeydown="handleEnter(event,'tcOrd')"></div></div>
+        <div class="input-group"><label>Traditional IRA withdrawal</label><div class="input-row"><input type="range" min="0" max="1000000" step="5000" value="0" id="tcTrad" oninput="syncFromSlider('tcTrad')"><input type="text" class="num-input" id="tcTradNum" value="0" onchange="syncFromInput('tcTrad')" onkeydown="handleEnter(event,'tcTrad')"></div></div>
         <div class="input-group"><label>Qualified dividends</label><div class="input-row"><input type="range" min="0" max="1000000" step="5000" value="200000" id="tcDiv" oninput="syncFromSlider('tcDiv')"><input type="text" class="num-input" id="tcDivNum" value="200,000" onchange="syncFromInput('tcDiv')" onkeydown="handleEnter(event,'tcDiv')"></div></div>
-        <div class="input-group"><label>Ordinary deferred income</label><div class="input-row"><input type="range" min="0" max="1000000" step="5000" value="200000" id="tcOrd" oninput="syncFromSlider('tcOrd')"><input type="text" class="num-input" id="tcOrdNum" value="200,000" onchange="syncFromInput('tcOrd')" onkeydown="handleEnter(event,'tcOrd')"></div></div>
-        <div class="input-group"><label>Target after-tax income</label><div class="input-row"><input type="range" min="50000" max="1500000" step="5000" value="500000" id="tcTarget" oninput="syncFromSlider('tcTarget')"><input type="text" class="num-input" id="tcTargetNum" value="500,000" onchange="syncFromInput('tcTarget')" onkeydown="handleEnter(event,'tcTarget')"></div></div>
+        <div class="input-group"><label>Target after-tax income</label><div class="input-row"><input type="range" min="50000" max="2000000" step="5000" value="500000" id="tcTarget" oninput="syncFromSlider('tcTarget')"><input type="text" class="num-input" id="tcTargetNum" value="500,000" onchange="syncFromInput('tcTarget')" onkeydown="handleEnter(event,'tcTarget')"></div></div>
         <div class="tc-note">Drag sliders or type values directly. Assumes qualified dividends and long-term capital gains.</div>
       </div>
       <div class="tc-results" id="tc-results"></div>
@@ -405,7 +406,7 @@ function showTab(id) {
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
 }
 
-function jumpToTaxCalc(ordIncome, afterTaxTarget) {
+function jumpToTaxCalc(dcpIncome, tradIncome, afterTaxTarget) {
   /* Navigate to Tax Calc tab */
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -414,14 +415,19 @@ function jumpToTaxCalc(ordIncome, afterTaxTarget) {
   document.querySelectorAll('.tab').forEach(t => {
     if (t.getAttribute('onclick') === "showTab('taxcalc')") t.classList.add('active');
   });
-  /* Pre-populate inputs: ordinary income (DCP+Traditional) + after-tax target */
-  const setField = (id, val, max) => {
-    document.getElementById(id).value = Math.min(Math.round(val), max);
-    document.getElementById(id + 'Num').value = formatNum(Math.round(val));
+  /* Pre-populate — expand slider max if value exceeds it, always write number input */
+  const setField = (id, val) => {
+    const rounded = Math.round(val);
+    const slider = document.getElementById(id);
+    if (slider && rounded > +slider.max) slider.max = rounded;
+    if (slider) slider.value = Math.min(rounded, +slider.max);
+    const numEl = document.getElementById(id + 'Num');
+    if (numEl) numEl.value = formatNum(rounded);
   };
-  setField('tcOrd', ordIncome,      1000000);
-  setField('tcDiv', 0,              1000000);
-  setField('tcTarget', afterTaxTarget, 1500000);
+  setField('tcOrd',    dcpIncome);
+  setField('tcTrad',   tradIncome);
+  setField('tcDiv',    0);
+  setField('tcTarget', afterTaxTarget);
   solveTax();
 }
 
@@ -936,14 +942,29 @@ function cgTaxCalc(ordTI,cgDiv){let tax=0,filled=ordTI,rem=cgDiv;for(const[thr,r
 function niit(agi,nii){const ex=Math.max(0,agi-niitThr[tcFiling]);return .038*Math.min(nii,ex);}
 
 function solveTax(){
-  const divs=+document.getElementById('tcDiv').value, ord=+document.getElementById('tcOrd').value, target=+document.getElementById('tcTarget').value;
-  const sd=stdDed[tcFiling], taxOrd=Math.max(0,ord-sd), oTax=ordTax(taxOrd);
-  let lo=0,hi=5000000;
-  for(let i=0;i<60;i++){const mid=(lo+hi)/2;const cdt=cgTaxCalc(taxOrd,divs+mid);const n=niit(ord+divs+mid,divs+mid);const at=(ord+divs+mid)-oTax-cdt-n;if(at<target)lo=mid;else hi=mid;}
-  const cg=Math.max(0,Math.round((lo+hi)/2)), gross=ord+divs+cg;
-  const cdTax=cgTaxCalc(taxOrd,divs+cg), nTax=niit(gross,divs+cg), totalTax=oTax+cdTax+nTax, afterTax=gross-totalTax, effRate=gross>0?totalTax/gross:0;
+  /* Read from text inputs — sliders are range-capped, number inputs are not */
+  const ord    = parseNum(document.getElementById('tcOrdNum').value);   // DCP / NQDC
+  const trad   = parseNum(document.getElementById('tcTradNum').value);  // Traditional IRA
+  const divs   = parseNum(document.getElementById('tcDivNum').value);   // Qualified dividends
+  const target = parseNum(document.getElementById('tcTargetNum').value);
+  const totalOrd = ord + trad;
+  const sd = stdDed[tcFiling];
+  const taxOrd = Math.max(0, totalOrd - sd);
+  const oTax = ordTax(taxOrd);
+  let lo=0, hi=8000000;
+  for(let i=0;i<60;i++){
+    const mid=(lo+hi)/2;
+    const cdt=cgTaxCalc(taxOrd,divs+mid);
+    const n=niit(totalOrd+divs+mid,divs+mid);
+    const at=(totalOrd+divs+mid)-oTax-cdt-n;
+    if(at<target)lo=mid; else hi=mid;
+  }
+  const cg=Math.max(0,Math.round((lo+hi)/2));
+  const gross=totalOrd+divs+cg;
+  const cdTax=cgTaxCalc(taxOrd,divs+cg), nTax=niit(gross,divs+cg);
+  const totalTax=oTax+cdTax+nTax, afterTax=gross-totalTax, effRate=gross>0?totalTax/gross:0;
   const divShare=(divs+cg)>0?divs/(divs+cg):0, divTaxEst=cdTax*divShare, cgTaxEst=cdTax-divTaxEst;
-  const ordPct=gross>0?ord/gross*100:0, divPct=gross>0?divs/gross*100:0, cgPct=gross>0?cg/gross*100:0;
+  const ordPct=gross>0?totalOrd/gross*100:0, divPct=gross>0?divs/gross*100:0, cgPct=gross>0?cg/gross*100:0;
   document.getElementById('tc-results').innerHTML=`
     <div class="metrics" style="grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
       <div class="metric-card"><div class="label">Gross needed</div><div class="value accent" style="font-size:20px;">${fmtD(gross)}</div></div>
@@ -957,11 +978,13 @@ function solveTax(){
       ${cgPct>0?`<div class="comp-seg" style="width:${cgPct}%;background:#D85A30;color:#fff;">Cap gains</div>`:''}
     </div>
     <div class="legend">
-      <span class="legend-item"><span class="legend-dot" style="background:#7F77DD;"></span>Ordinary ${fmtD(ord)}</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#7F77DD;"></span>Ordinary ${fmtD(totalOrd)}</span>
       <span class="legend-item"><span class="legend-dot" style="background:var(--accent3);"></span>Dividends ${fmtD(divs)}</span>
       <span class="legend-item"><span class="legend-dot" style="background:#D85A30;"></span>Cap gains ${fmtD(cg)}</span>
     </div>
-    <div class="tc-row"><span>Ordinary income</span><span class="val">${fmtD(ord)}</span></div>
+    ${ord>0?`<div class="tc-row"><span>DCP / NQDC income</span><span class="val">${fmtD(ord)}</span></div>`:''}
+    ${trad>0?`<div class="tc-row"><span>Traditional IRA withdrawal</span><span class="val">${fmtD(trad)}</span></div>`:''}
+    <div class="tc-row${(ord>0&&trad>0)?' indent':''}"><span>${(ord>0&&trad>0)?'Total ordinary':'Ordinary income'}</span><span class="val">${fmtD(totalOrd)}</span></div>
     <div class="tc-row indent"><span>Less standard deduction</span><span class="val">-${fmtD(sd)}</span></div>
     <div class="tc-row indent"><span>Taxable ordinary</span><span class="val">${fmtD(taxOrd)}</span></div>
     <div class="tc-row indent"><span>Ordinary tax</span><span class="val">${fmtD(oTax)}</span></div>
@@ -1204,7 +1227,7 @@ function updateRetirement(){
       <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw)+(r.isRMD?' <span style="font-size:10px;color:var(--accent);">RMD</span>':''):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
-      <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.dcpDraw+r.tradDraw)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's ordinary income and after-tax target">${fmtD(r.taxPaid)}</td>
+      <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.dcpDraw)},${Math.round(r.tradDraw)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's income breakdown">${fmtD(r.taxPaid)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
       <td style="color:${warn?'var(--danger)':'var(--text)'};font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
       <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.cwr.toFixed(1)}%</td>
