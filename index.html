@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alpha Optimization — Worldwide Value Portfolio V3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Playfair+Display:wght@400;600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+:root {
+  --bg: #0a0d12;
+  --surface: #111520;
+  --surface2: #161c2a;
+  --border: #1e2a3a;
+  --accent: #c8a96e;
+  --accent2: #5b8dee;
+  --accent3: #4ecdc4;
+  --danger: #e05c5c;
+  --text: #e8edf5;
+  --muted: #6b7a94;
+  --taxable-color: #5b8dee;
+  --trad-color: #c8a96e;
+  --roth-color: #4ecdc4;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+.header {
+  border-bottom: 1px solid var(--border);
+  padding: 24px 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.header h1 { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 600; color: var(--accent); }
+.header .sub { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+.container { max-width: 1200px; margin: 0 auto; padding: 24px 32px; }
+
+.tabs { display: flex; gap: 2px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px; width: fit-content; flex-wrap: wrap; }
+.tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); transition: all 0.2s; user-select: none; white-space: nowrap; border: none; background: none; font-family: 'DM Sans', sans-serif; }
+.tab:hover { color: var(--text); background: var(--surface2); }
+.tab.active { color: var(--accent); background: var(--surface2); }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.metric-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+.metric-card .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; font-family: 'DM Mono', monospace; }
+.metric-card .value { font-size: 24px; font-weight: 600; color: var(--text); }
+.metric-card .value.accent { color: var(--accent); }
+.metric-card .value.accent2 { color: var(--accent2); }
+.metric-card .value.accent3 { color: var(--accent3); }
+.metric-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.fund-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+.fund-table th { text-align: left; padding: 10px 12px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; font-family: 'DM Mono', monospace; border-bottom: 1px solid var(--border); }
+.fund-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+.fund-table tr:hover { background: var(--surface); }
+.fund-table .ticker { font-family: 'DM Mono', monospace; font-weight: 500; color: var(--accent); }
+.fund-table .bucket-taxable { color: var(--taxable-color); }
+.fund-table .bucket-trad { color: var(--trad-color); }
+.fund-table .bucket-roth { color: var(--roth-color); }
+
+.section-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.subsection { margin-bottom: 32px; }
+
+.bar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.bar-label { font-size: 12px; color: var(--muted); min-width: 80px; text-align: right; font-family: 'DM Mono', monospace; }
+.bar-track { flex: 1; height: 20px; background: var(--surface); border-radius: 4px; overflow: hidden; position: relative; display: flex; }
+.bar-fill { height: 100%; transition: width 0.5s; }
+.bar-value { font-size: 12px; color: var(--text); min-width: 60px; font-family: 'DM Mono', monospace; }
+
+.tc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 800px) { .tc-grid { grid-template-columns: 1fr; } }
+.tc-inputs, .tc-results { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+
+.input-group { margin-bottom: 16px; }
+.input-group label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; font-family: 'DM Mono', monospace; }
+.input-row { display: flex; align-items: center; gap: 8px; }
+.input-row input[type=range] { flex: 1; accent-color: var(--accent); }
+
+.num-input { width: 110px; padding: 6px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; text-align: right; outline: none; }
+.num-input:focus { border-color: var(--accent); }
+
+.filing-toggle { display: flex; gap: 2px; margin-bottom: 16px; background: var(--surface2); border-radius: 6px; padding: 3px; }
+.filing-btn { padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); background: transparent; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
+.filing-btn.active { color: var(--accent); background: var(--surface); }
+
+.tc-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 13px; }
+.tc-row.indent { padding-left: 16px; color: var(--muted); font-size: 12px; }
+.tc-row .val { font-family: 'DM Mono', monospace; font-weight: 500; text-align: right; }
+.tc-divider { border-top: 1px solid var(--border); margin: 8px 0; }
+.tc-row.total { font-weight: 600; font-size: 14px; }
+.tc-row.highlight { color: var(--accent3); font-weight: 600; }
+
+.composition-bar { display: flex; height: 28px; border-radius: 6px; overflow: hidden; margin: 12px 0 8px; }
+.comp-seg { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; min-width: 30px; transition: width 0.3s; }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.legend-item { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+.tc-note { font-size: 11px; color: var(--muted); margin-top: 12px; line-height: 1.5; font-style: italic; }
+
+.alpha-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+.alpha-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 8px; }
+.alpha-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.alpha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 800px) { .alpha-grid { grid-template-columns: 1fr; } }
+
+.nqdc-table { width: 100%; border-collapse: collapse; }
+.nqdc-table th { text-align: left; padding: 8px 10px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-family: 'DM Mono', monospace; border-bottom: 1px solid var(--border); }
+.nqdc-table td { padding: 8px 10px; font-size: 12px; border-bottom: 1px solid var(--border); font-family: 'DM Mono', monospace; }
+
+/* V3 additions */
+.safemax-hero { background: linear-gradient(135deg, #0f172a, #1e1b4b); border: 1px solid rgba(91,141,238,0.2); border-radius: 10px; padding: 24px; text-align: center; margin-bottom: 20px; }
+.safemax-num { font-size: 56px; font-weight: 700; font-family: 'DM Mono', monospace; color: var(--accent3); line-height: 1; }
+
+.v3-input { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface2); color: var(--text); font-family: 'DM Mono', monospace; font-size: 13px; outline: none; box-sizing: border-box; }
+.v3-input:focus { border-color: var(--accent); }
+.v3-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%236b7a94' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+
+.v3-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.v3-grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .v3-grid2, .v3-grid3 { grid-template-columns: 1fr; } }
+
+.burn-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.burn-card { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+.burn-card .stage-name { font-size: 13px; font-weight: 600; }
+.burn-card .stage-amt { font-size: 20px; font-weight: 700; font-family: 'DM Mono', monospace; margin-top: 4px; }
+.burn-card .stage-sub { font-size: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Alpha Optimization — Worldwide Value Portfolio</h1>
+  <span class="sub">V3 Cumulative · V1 Four-Alpha + V2 SCV/DI + V3 Bengen SAFEMAX & DCP</span>
+</div>
+
+<div class="container">
+  <div class="tabs" id="tab-bar"></div>
+
+  <!-- ═══ OVERVIEW (V1) ═══ -->
+  <div id="tab-overview" class="tab-panel active">
+    <div class="metrics" id="overview-metrics"></div>
+    <div class="subsection">
+      <div class="section-title">Fund allocation — SCV tilt + direct indexing</div>
+      <table class="fund-table">
+        <thead><tr><th>Fund</th><th>Ticker</th><th>Weight</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
+        <tbody id="fund-rows"></tbody>
+      </table>
+    </div>
+    <div class="subsection">
+      <div class="section-title">Four-alpha framework</div>
+      <div class="alpha-grid" id="alpha-cards"></div>
+    </div>
+  </div>
+
+  <!-- ═══ LOCATION ALPHA (V1) ═══ -->
+  <div id="tab-location" class="tab-panel">
+    <div class="section-title">Tax location strategy</div>
+    <div class="subsection">
+      <table class="fund-table">
+        <thead><tr><th>Fund</th><th>Taxable</th><th>Traditional</th><th>Roth</th><th>Rationale</th></tr></thead>
+        <tbody id="location-rows"></tbody>
+      </table>
+    </div>
+    <div class="subsection">
+      <div class="section-title">Account balances over 30 years</div>
+      <div id="account-bars"></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAX ALPHA (V1) ═══ -->
+  <div id="tab-tax" class="tab-panel">
+    <div class="section-title">Withdrawal sequencing</div>
+    <div class="alpha-grid">
+      <div class="alpha-card"><h3 style="color:var(--taxable-color);">1. Taxable first</h3><p>Draw from brokerage first — long-term capital gains taxed at 0/15/20%. Step-up basis resets on death. Preserves tax-advantaged growth in IRA/Roth.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--trad-color);">2. Traditional IRA — bracket-managed</h3><p>Strategic Roth conversions and draws to fill lower brackets. Avoid large RMDs that push into 32%+ brackets. Drain Traditional before 73 if possible.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--roth-color);">3. Roth — last resort</h3><p>Tax-free growth, no RMDs, tax-free to heirs. Touch last. Every year of compound growth in Roth is permanently tax-free.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--danger);">4. NQDC — escalating draw</h3><p>$2.5M deferred comp drawn over 15 years in escalating schedule. Taxed as ordinary income. Exhausted by Year 19. Coordinate with IRA draws to manage brackets.</p></div>
+    </div>
+    <div class="subsection" style="margin-top:24px;">
+      <div class="section-title">NQDC draw schedule</div>
+      <table class="nqdc-table">
+        <thead><tr><th>Year</th><th>Draw</th><th>Cumulative</th><th>Remaining</th></tr></thead>
+        <tbody id="nqdc-rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══ ESTATE ALPHA (V1) ═══ -->
+  <div id="tab-estate" class="tab-panel">
+    <div class="section-title">Estate optimization</div>
+    <div class="alpha-grid">
+      <div class="alpha-card"><h3 style="color:var(--taxable-color);">Taxable — step-up basis</h3><p>Heirs receive assets at FMV on date of death. All embedded capital gains eliminated. Direct indexing gives more granular step-up on every individual lot.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--roth-color);">Roth — tax-free inheritance</h3><p>Beneficiaries inherit tax-free but must empty within 10 years (SECURE Act). No income tax on any distributions. Ideal for high-income heirs.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--trad-color);">Traditional — convert & drain</h3><p>Traditional IRA inherited by non-spouse must be emptied within 10 years, all taxed as ordinary income. Convert as much as practical to Roth during retirement.</p></div>
+      <div class="alpha-card"><h3 style="color:var(--accent);">Estate exemption</h3><p>2025 federal estate exemption: $15M per person ($30M married). Above this, 40% estate tax. Plan with trusts and gifting strategies.</p></div>
+    </div>
+  </div>
+
+  <!-- ═══ TAX CALC (V1) ═══ -->
+  <div id="tab-taxcalc" class="tab-panel">
+    <div class="section-title">Retirement withdrawal tax calculator</div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:20px;">Solve for gross pretax withdrawals needed from dividends, ordinary income, and capital gains to reach an after-tax target. 2025 federal brackets (OBBBA). WA resident — no state tax.</p>
+    <div class="tc-grid">
+      <div class="tc-inputs">
+        <div class="filing-toggle">
+          <button class="filing-btn active" onclick="setFiling('single')">Single</button>
+          <button class="filing-btn" onclick="setFiling('mfj')">Married filing jointly</button>
+        </div>
+        <div class="input-group"><label>Qualified dividends</label><div class="input-row"><input type="range" min="0" max="1000000" step="5000" value="200000" id="tcDiv" oninput="syncFromSlider('tcDiv')"><input type="text" class="num-input" id="tcDivNum" value="200,000" onchange="syncFromInput('tcDiv')" onkeydown="handleEnter(event,'tcDiv')"></div></div>
+        <div class="input-group"><label>Ordinary deferred income</label><div class="input-row"><input type="range" min="0" max="1000000" step="5000" value="200000" id="tcOrd" oninput="syncFromSlider('tcOrd')"><input type="text" class="num-input" id="tcOrdNum" value="200,000" onchange="syncFromInput('tcOrd')" onkeydown="handleEnter(event,'tcOrd')"></div></div>
+        <div class="input-group"><label>Target after-tax income</label><div class="input-row"><input type="range" min="50000" max="1500000" step="5000" value="500000" id="tcTarget" oninput="syncFromSlider('tcTarget')"><input type="text" class="num-input" id="tcTargetNum" value="500,000" onchange="syncFromInput('tcTarget')" onkeydown="handleEnter(event,'tcTarget')"></div></div>
+        <div class="tc-note">Drag sliders or type values directly. Assumes qualified dividends and long-term capital gains.</div>
+      </div>
+      <div class="tc-results" id="tc-results"></div>
+    </div>
+  </div>
+
+  <!-- ═══ BURN STAGES (V1 widget → V3) ═══ -->
+  <div id="tab-burn" class="tab-panel">
+    <div class="section-title">Retirement burn stages — $10M liquid</div>
+    <div class="burn-row" id="burn-cards"></div>
+    <div class="subsection" style="margin-top:16px;">
+      <table class="fund-table" id="burn-table"></table>
+    </div>
+    <div class="alpha-card" style="margin-top:16px;">
+      <h3 style="color:var(--accent3);">Runway analysis</h3>
+      <p id="burn-runway"></p>
+    </div>
+  </div>
+
+  <!-- ═══ RICHER RETIREMENT (V3 — Bengen) ═══ -->
+  <div id="tab-retirement" class="tab-panel">
+    <div class="section-title">Richer Retirement — Bengen SAFEMAX</div>
+    <div class="safemax-hero">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-family:'DM Mono',monospace;">Your Adjusted SAFEMAX</div>
+      <div class="safemax-num" id="safemax-display">4.80%</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;" id="safemax-sub"></div>
+    </div>
+    <div class="v3-grid2" style="margin-bottom:16px;">
+      <div class="alpha-card">
+        <div class="input-group"><label>Shiller CAPE</label><input type="number" class="v3-input" id="rCape" value="38" min="5" max="50" onchange="updateRetirement()"></div>
+        <div class="input-group"><label>Inflation regime</label><select class="v3-input v3-select" id="rRegime" onchange="updateRetirement()"><option value="low">Low (0–2.5%)</option><option value="moderate" selected>Moderate (2.5–5%)</option><option value="high">High (5%+)</option></select></div>
+        <div class="input-group"><label>Horizon (years)</label><input type="number" class="v3-input" id="rHorizon" value="30" min="10" max="50" onchange="updateRetirement()"></div>
+      </div>
+      <div class="alpha-card">
+        <div class="input-group"><label>Legacy goal %</label><input type="number" class="v3-input" id="rLegacy" value="0" min="0" max="100" step="5" onchange="updateRetirement()"></div>
+        <div class="input-group"><label>Eff. tax rate %</label><input type="number" class="v3-input" id="rTax" value="35" min="0" max="50" onchange="updateRetirement()"></div>
+        <div class="input-group"><label>Return engine</label><select class="v3-input v3-select" id="rEngine" onchange="updateRetirement()"><option value="factor" selected>Factor Portfolio (7.8%)</option><option value="sp500">S&P Blend (8.2%)</option></select></div>
+      </div>
+    </div>
+    <div class="subsection">
+      <div class="section-title">CAPE lookup — Bengen two-factor model</div>
+      <table class="fund-table" id="cape-table"></table>
+    </div>
+    <div class="subsection">
+      <div class="section-title">Withdrawal projection</div>
+      <div id="retirement-bars"></div>
+      <table class="nqdc-table" style="margin-top:16px;" id="retirement-table"></table>
+    </div>
+  </div>
+
+  <!-- ═══ DCP MODEL (V3) ═══ -->
+  <div id="tab-dcp" class="tab-panel">
+    <div class="section-title">Microsoft DCP distribution model</div>
+    <div class="v3-grid2" style="margin-bottom:16px;">
+      <div class="alpha-card">
+        <div class="input-group"><label>Deferral amount ($)</label><input type="number" class="v3-input" id="dcpAmt" value="1500000" step="100000" onchange="updateDCP()"></div>
+        <div class="input-group"><label>Compound years before payout</label><input type="number" class="v3-input" id="dcpComp" value="5" min="0" max="20" onchange="updateDCP()"></div>
+      </div>
+      <div class="alpha-card">
+        <div class="input-group"><label>Installments (3–15)</label><input type="number" class="v3-input" id="dcpInst" value="10" min="3" max="15" onchange="updateDCP()"></div>
+        <div class="input-group"><label>Annual return %</label><input type="number" class="v3-input" id="dcpRet" value="10" min="0" max="20" onchange="updateDCP()"></div>
+      </div>
+    </div>
+    <div class="metrics" id="dcp-metrics"></div>
+    <table class="nqdc-table" id="dcp-table"></table>
+  </div>
+
+  <!-- ═══ V2 vs V1 (V1 original) ═══ -->
+  <div id="tab-v2diff" class="tab-panel">
+    <div class="section-title">V2 enhancements over V1 baseline</div>
+    <p style="font-size:13px; color:var(--muted); margin-bottom:20px;">Three changes that compound to an estimated 0.8–1.5% annual after-tax return improvement over V1.</p>
+    <div class="alpha-grid" style="grid-template-columns:1fr 1fr 1fr;">
+      <div class="alpha-card" style="border-left:3px solid var(--accent2);"><h3 style="color:var(--accent2);">Direct indexing in taxable</h3><p><strong style="color:var(--text);">V1:</strong> ETFs (AVLV, DFIV) in taxable<br><strong style="color:var(--text);">V2:</strong> Direct index (DI-AVLV, DI-DFIV)</p><p style="margin-top:8px;"><strong style="color:var(--accent2);">Alpha added:</strong> +0.5–1.5%/yr from daily TLH on individual lots.</p></div>
+      <div class="alpha-card" style="border-left:3px solid var(--accent);"><h3 style="color:var(--accent);">SCV tilt (30/25)</h3><p><strong style="color:var(--text);">V1:</strong> Equal weight 20% each<br><strong style="color:var(--text);">V2:</strong> AVUV 30% / AVDV 25%</p><p style="margin-top:8px;"><strong style="color:var(--accent);">Alpha added:</strong> +0.5–1.0%/yr from overweighting the dominant factor premium.</p></div>
+      <div class="alpha-card" style="border-left:3px solid var(--accent3);"><h3 style="color:var(--accent3);">Private credit in Traditional</h3><p><strong style="color:var(--text);">V1:</strong> 100% equity in Traditional<br><strong style="color:var(--text);">V2:</strong> 5% private credit (8-10% yield)</p><p style="margin-top:8px;"><strong style="color:var(--accent3);">Alpha added:</strong> Illiquidity premium sheltered from ordinary income tax.</p></div>
+    </div>
+    <div class="subsection" style="margin-top:24px;">
+      <div class="section-title">30-year projected impact</div>
+      <table class="fund-table">
+        <thead><tr><th>Metric</th><th>V1 Baseline</th><th>V2 Enhanced</th><th>Delta</th></tr></thead>
+        <tbody>
+          <tr><td>Allocation</td><td>Equal weight 20%</td><td>SCV tilt 30/25/15/15/10 + 5% priv credit</td><td style="color:var(--accent3);">Concentrated factor</td></tr>
+          <tr><td>Taxable strategy</td><td>ETFs (AVLV, DFIV)</td><td>Direct indexing</td><td style="color:var(--accent3);">+TLH alpha</td></tr>
+          <tr><td>Blended ER</td><td>0.28%</td><td>0.31%</td><td style="color:var(--danger);">+0.03%</td></tr>
+          <tr><td>Est. annual after-tax alpha</td><td>Baseline</td><td>+0.8–1.5%</td><td style="color:var(--accent3);">Significant</td></tr>
+          <tr><td>30-yr impact on $10M</td><td>~$100M</td><td>~$115–130M</td><td style="color:var(--accent3);">+$15–30M</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   TABS
+   ═══════════════════════════════════════════════════════════════════ */
+const tabDefs = [
+  ['overview','Overview'],['location','Location Alpha'],['tax','Tax Alpha'],
+  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['burn','Burn Stages'],
+  ['retirement','Retirement'],['dcp','DCP Model'],['v2diff','V2 vs V1']
+];
+
+document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
+  `<button class="tab${i===0?' active':''}" onclick="showTab('${id}')">${name}</button>`
+).join('');
+
+function showTab(id) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  const idx = tabDefs.findIndex(t => t[0]===id);
+  if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   V1 DATA
+   ═══════════════════════════════════════════════════════════════════ */
+const funds = [
+  {name:'Direct Index US Large Value',ticker:'DI-AVLV',weight:15,er:'0.20%',cat:'US Large Value',loc:'Taxable',rationale:'Direct indexing replaces ETF — daily TLH, FTC-eligible'},
+  {name:'Avantis US Small Cap Value',ticker:'AVUV',weight:30,er:'0.25%',cat:'US Small Value',loc:'Traditional',rationale:'SCV tilt to 30% — dominant factor premium, sheltered'},
+  {name:'Direct Index Intl Value',ticker:'DI-DFIV',weight:10,er:'0.30%',cat:'Intl Value',loc:'Taxable',rationale:'Direct indexing intl — FTC recovery + systematic TLH'},
+  {name:'Avantis Intl Small Cap Value',ticker:'AVDV',weight:25,er:'0.36%',cat:'Intl Small Value',loc:'Traditional',rationale:'SCV tilt to 25% — high yield sheltered'},
+  {name:'Avantis EM Value',ticker:'AVES',weight:15,er:'0.36%',cat:'EM Value',loc:'Roth',rationale:'Highest volatility + growth — tax-free compounding in Roth'},
+  {name:'Private Credit Fund',ticker:'PRIV-CR',weight:5,er:'0.85%',cat:'Private Credit',loc:'Traditional',rationale:'Illiquidity premium, 8-10% yield sheltered from ordinary tax'},
+];
+
+const alphas = [
+  {title:'Investment Alpha',desc:'SCV-tilted allocation: AVUV 30% / AVDV 25%. Small-cap value premium is the dominant factor. Private credit adds illiquidity premium at 8-10% yield.',color:'var(--accent)'},
+  {title:'Location Alpha',desc:'Direct indexing in taxable — daily TLH on individual names adds 0.5-1.5% annually. High-yield SCV + private credit sheltered in Traditional. Highest-growth EM in Roth.',color:'var(--accent2)'},
+  {title:'Tax Alpha',desc:'LTCG-first withdrawal + direct indexing TLH. Bracket-managed Traditional draws. Strategic Roth conversions. NQDC coordinated with IRA.',color:'var(--accent3)'},
+  {title:'Estate Alpha',desc:'Direct-indexed taxable gets full step-up on every lot. Roth passes tax-free. Traditional converted pre-death.',color:'var(--danger)'},
+];
+
+const portfolio = {base:10000000, additions:2500000, addYears:4, nqdc:2500000};
+const fmtD = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
+const fmtM = n => '$'+(n/1e6).toFixed(2)+'M';
+
+/* ═══ OVERVIEW ═══ */
+function buildOverview() {
+  const total = portfolio.base + (portfolio.additions*portfolio.addYears) + portfolio.nqdc;
+  document.getElementById('overview-metrics').innerHTML = `
+    <div class="metric-card"><div class="label">Base portfolio</div><div class="value accent">$${(portfolio.base/1e6).toFixed(0)}M</div></div>
+    <div class="metric-card"><div class="label">Annual additions</div><div class="value accent2">$${(portfolio.additions/1e6).toFixed(1)}M × ${portfolio.addYears} yrs</div></div>
+    <div class="metric-card"><div class="label">NQDC deferred</div><div class="value accent3">$${(portfolio.nqdc/1e6).toFixed(1)}M</div></div>
+    <div class="metric-card"><div class="label">Total capital</div><div class="value">$${(total/1e6).toFixed(1)}M</div><div class="sub">30-year horizon</div></div>
+    <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">SCV tilt + DI + private credit</div></div>
+    <div class="metric-card"><div class="label">Blended ER</div><div class="value">0.31%</div></div>`;
+  document.getElementById('fund-rows').innerHTML = funds.map(f => {
+    const bc = f.loc==='Taxable'?'bucket-taxable':f.loc==='Traditional'?'bucket-trad':'bucket-roth';
+    return `<tr><td>${f.name}</td><td class="ticker">${f.ticker}</td><td>${f.weight}%</td><td>${f.er}</td><td>${f.cat}</td><td class="${bc}">${f.loc}</td></tr>`;
+  }).join('');
+  document.getElementById('alpha-cards').innerHTML = alphas.map(a =>
+    `<div class="alpha-card"><h3 style="color:${a.color};">${a.title}</h3><p>${a.desc}</p></div>`
+  ).join('');
+}
+
+/* ═══ LOCATION ═══ */
+function buildLocation() {
+  document.getElementById('location-rows').innerHTML = funds.map(f => {
+    const t=f.loc==='Taxable'?f.weight+'%':'—', tr=f.loc==='Traditional'?f.weight+'%':'—', r=f.loc==='Roth'?f.weight+'%':'—';
+    return `<tr><td class="ticker">${f.ticker}</td><td class="bucket-taxable">${t}</td><td class="bucket-trad">${tr}</td><td class="bucket-roth">${r}</td><td style="font-size:12px;color:var(--muted);">${f.rationale}</td></tr>`;
+  }).join('');
+  const years=[0,5,10,15,20,25,30], rate=0.08;
+  const maxT=(portfolio.base+portfolio.nqdc)*Math.pow(1+rate,30);
+  document.getElementById('account-bars').innerHTML = years.map(y => {
+    const m=Math.pow(1+rate,y);
+    const tx=(portfolio.base*0.4)*m, tr=(portfolio.base*0.4+portfolio.nqdc)*m, ro=(portfolio.base*0.2)*m, tot=tx+tr+ro;
+    return `<div class="bar-row"><span class="bar-label">Year ${y}</span><div class="bar-track"><div class="bar-fill" style="width:${(tx/maxT*100).toFixed(1)}%;background:var(--taxable-color);"></div><div class="bar-fill" style="width:${(tr/maxT*100).toFixed(1)}%;background:var(--trad-color);"></div><div class="bar-fill" style="width:${(ro/maxT*100).toFixed(1)}%;background:var(--roth-color);"></div></div><span class="bar-value">$${(tot/1e6).toFixed(1)}M</span></div>`;
+  }).join('');
+}
+
+/* ═══ NQDC ═══ */
+function buildNQDC() {
+  const sched=[100000,110000,120000,130000,140000,150000,160000,175000,185000,195000,200000,210000,215000,220000,290000];
+  let cum=0;
+  document.getElementById('nqdc-rows').innerHTML = sched.map((d,i) => {
+    cum+=d; const rem=portfolio.nqdc-cum;
+    return `<tr><td>Year ${i+5}</td><td>${fmtD(d)}</td><td>${fmtD(cum)}</td><td style="color:${rem<=0?'var(--danger)':'var(--muted)'}">${fmtD(Math.max(0,rem))}</td></tr>`;
+  }).join('');
+}
+
+/* ═══ TAX CALC ═══ */
+let tcFiling='single';
+const brackets={single:[[11925,.10],[36550,.12],[54875,.22],[93950,.24],[53225,.32],[125050,.35],[Infinity,.37]],mfj:[[23850,.10],[73100,.12],[109750,.22],[187900,.24],[106450,.32],[124825,.35],[Infinity,.37]]};
+const stdDed={single:15750,mfj:31500};
+const cgBrk={single:[[48350,0],[485050,.15],[Infinity,.20]],mfj:[[96700,0],[503350,.15],[Infinity,.20]]};
+const niitThr={single:200000,mfj:250000};
+
+function ordTax(ti){let tax=0,rem=ti;for(const[w,r]of brackets[tcFiling]){const c=Math.min(rem,w);tax+=c*r;rem-=c;if(rem<=0)break;}return tax;}
+function cgTaxCalc(ordTI,cgDiv){let tax=0,filled=ordTI,rem=cgDiv;for(const[thr,r]of cgBrk[tcFiling]){const sp=Math.max(0,thr-filled);const c=Math.min(rem,sp);tax+=c*r;filled+=c;rem-=c;if(rem<=0)break;}return tax;}
+function niit(agi,nii){const ex=Math.max(0,agi-niitThr[tcFiling]);return .038*Math.min(nii,ex);}
+
+function solveTax(){
+  const divs=+document.getElementById('tcDiv').value, ord=+document.getElementById('tcOrd').value, target=+document.getElementById('tcTarget').value;
+  const sd=stdDed[tcFiling], taxOrd=Math.max(0,ord-sd), oTax=ordTax(taxOrd);
+  let lo=0,hi=5000000;
+  for(let i=0;i<60;i++){const mid=(lo+hi)/2;const cdt=cgTaxCalc(taxOrd,divs+mid);const n=niit(ord+divs+mid,divs+mid);const at=(ord+divs+mid)-oTax-cdt-n;if(at<target)lo=mid;else hi=mid;}
+  const cg=Math.max(0,Math.round((lo+hi)/2)), gross=ord+divs+cg;
+  const cdTax=cgTaxCalc(taxOrd,divs+cg), nTax=niit(gross,divs+cg), totalTax=oTax+cdTax+nTax, afterTax=gross-totalTax, effRate=gross>0?totalTax/gross:0;
+  const divShare=(divs+cg)>0?divs/(divs+cg):0, divTaxEst=cdTax*divShare, cgTaxEst=cdTax-divTaxEst;
+  const ordPct=gross>0?ord/gross*100:0, divPct=gross>0?divs/gross*100:0, cgPct=gross>0?cg/gross*100:0;
+  document.getElementById('tc-results').innerHTML=`
+    <div class="metrics" style="grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
+      <div class="metric-card"><div class="label">Gross needed</div><div class="value accent" style="font-size:20px;">${fmtD(gross)}</div></div>
+      <div class="metric-card"><div class="label">Total tax</div><div class="value" style="font-size:20px;color:var(--danger);">${fmtD(totalTax)}</div></div>
+      <div class="metric-card"><div class="label">Eff rate</div><div class="value accent3" style="font-size:20px;">${Math.round(effRate*100)}%</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-family:'DM Mono',monospace;margin-bottom:4px;">Gross composition</div>
+    <div class="composition-bar">
+      <div class="comp-seg" style="width:${ordPct}%;background:#7F77DD;color:#fff;">Ordinary</div>
+      <div class="comp-seg" style="width:${divPct}%;background:var(--accent3);color:#000;">Dividends</div>
+      ${cgPct>0?`<div class="comp-seg" style="width:${cgPct}%;background:#D85A30;color:#fff;">Cap gains</div>`:''}
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#7F77DD;"></span>Ordinary ${fmtD(ord)}</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--accent3);"></span>Dividends ${fmtD(divs)}</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#D85A30;"></span>Cap gains ${fmtD(cg)}</span>
+    </div>
+    <div class="tc-row"><span>Ordinary income</span><span class="val">${fmtD(ord)}</span></div>
+    <div class="tc-row indent"><span>Less standard deduction</span><span class="val">-${fmtD(sd)}</span></div>
+    <div class="tc-row indent"><span>Taxable ordinary</span><span class="val">${fmtD(taxOrd)}</span></div>
+    <div class="tc-row indent"><span>Ordinary tax</span><span class="val">${fmtD(oTax)}</span></div>
+    <div class="tc-divider"></div>
+    <div class="tc-row"><span>Qualified dividends</span><span class="val">${fmtD(divs)}</span></div>
+    <div class="tc-row indent"><span>Tax @ 0/15/20%</span><span class="val">${fmtD(divTaxEst)}</span></div>
+    <div class="tc-divider"></div>
+    <div class="tc-row"><span>LT capital gains (solved)</span><span class="val">${fmtD(cg)}</span></div>
+    <div class="tc-row indent"><span>Tax @ 0/15/20%</span><span class="val">${fmtD(cgTaxEst)}</span></div>
+    <div class="tc-divider"></div>
+    <div class="tc-row"><span>NIIT (3.8%)</span><span class="val">${fmtD(nTax)}</span></div>
+    <div class="tc-divider"></div>
+    <div class="tc-row total"><span>Total federal tax</span><span class="val" style="color:var(--danger);">${fmtD(totalTax)}</span></div>
+    <div class="tc-row highlight"><span>After-tax income</span><span class="val">${fmtD(afterTax)}</span></div>
+    <div class="tc-note">${tcFiling==='single'?'Single':'MFJ'} · 2025 brackets (OBBBA) · WA — no state tax · NIIT: ${fmtD(niitThr[tcFiling])} · Std ded: ${fmtD(sd)}</div>`;
+}
+
+function formatNum(n){return Math.round(n).toLocaleString();}
+function parseNum(s){return parseInt(s.replace(/[^0-9.-]/g,''),10)||0;}
+function syncFromSlider(id){document.getElementById(id+'Num').value=formatNum(+document.getElementById(id).value);solveTax();}
+function syncFromInput(id){const v=parseNum(document.getElementById(id+'Num').value);document.getElementById(id).value=v;document.getElementById(id+'Num').value=formatNum(v);solveTax();}
+function handleEnter(e,id){if(e.key==='Enter'){syncFromInput(id);e.target.blur();}}
+function setFiling(f){tcFiling=f;document.querySelectorAll('.filing-btn').forEach(b=>{b.classList.toggle('active',(f==='single'&&b.textContent==='Single')||(f==='mfj'&&b.textContent!=='Single'));});solveTax();}
+
+/* ═══════════════════════════════════════════════════════════════════
+   V3: BURN STAGES
+   ═══════════════════════════════════════════════════════════════════ */
+function buildBurn() {
+  const cats=[
+    {name:'Housing (mortgage/tax/ins)',s1:5000},{name:'Healthcare / Insurance',s1:2500},{name:'Taxes (est. quarterly)',s1:4000},
+    {name:'Food & Groceries',s1:2000},{name:'Utilities & Services',s1:800},{name:'Transportation / Auto',s1:1500},
+    {name:'Personal / Grooming',s1:500},{name:'Entertainment / Dining',s1:2000},{name:'Kids / Education',s1:3000},
+    {name:'Charitable Giving',s1:1500},{name:'Miscellaneous / Buffer',s1:1200},{name:'Travel',s1:8000},
+  ];
+  const stages=[{name:'Stage 1',ages:'50–60',mult:1.0,color:'var(--accent3)'},{name:'Stage 2',ages:'60–70',mult:0.80,color:'var(--accent)'},{name:'Stage 3',ages:'70+',mult:0.60,color:'var(--accent2)'}];
+  const totals=stages.map(s=>cats.reduce((sum,c)=>sum+c.s1*s.mult,0));
+  const annuals=totals.map(t=>t*12);
+  const ret=portfolio.base*0.07;
+
+  document.getElementById('burn-cards').innerHTML=stages.map((s,i)=>
+    `<div class="burn-card" style="border-color:${s.color}33;"><div class="stage-name" style="color:${s.color};">${s.name}</div><div style="font-size:10px;color:var(--muted);">${s.ages}</div><div class="stage-amt">${fmtD(totals[i])}<span style="font-size:10px;color:var(--muted);">/mo</span></div><div class="stage-sub">${fmtD(annuals[i])}/yr</div></div>`
+  ).join('');
+
+  let tbl=`<thead><tr><th>Category</th>${stages.map(s=>`<th style="color:${s.color};">${s.name}</th>`).join('')}</tr></thead><tbody>`;
+  cats.forEach(c=>{tbl+=`<tr><td>${c.name}</td>${stages.map(s=>`<td style="font-family:'DM Mono',monospace;color:${s.color};">${fmtD(c.s1*s.mult)}</td>`).join('')}</tr>`;});
+  tbl+=`<tr style="border-top:2px solid var(--border);font-weight:700;"><td>Monthly Total</td>${totals.map((t,i)=>`<td style="font-family:'DM Mono',monospace;color:${stages[i].color};">${fmtD(t)}</td>`).join('')}</tr>`;
+  tbl+=`<tr style="font-weight:700;"><td>Annual Total</td>${annuals.map((a,i)=>`<td style="font-family:'DM Mono',monospace;color:${stages[i].color};">${fmtD(a)}</td>`).join('')}</tr></tbody>`;
+  document.getElementById('burn-table').innerHTML=tbl;
+
+  document.getElementById('burn-runway').innerHTML=`Portfolio generates <strong style="color:var(--accent3);">${fmtD(ret)}/yr</strong> at 7% returns. Even at peak Stage 1 burn of ${fmtD(annuals[0])}/yr, surplus of <strong style="color:var(--accent3);">${fmtD(ret-annuals[0])}/yr</strong>. Portfolio grows in all stages. Runway: <strong>infinite</strong> on current assumptions.`;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   V3: RICHER RETIREMENT (BENGEN SAFEMAX)
+   ═══════════════════════════════════════════════════════════════════ */
+const CAPE_TBL={low:{10:9.5,15:8.0,20:6.95,25:6.2,30:5.5,35:5.25,40:5.0,45:4.8},moderate:{10:8.5,15:7.2,20:6.5,25:5.8,30:5.25,35:5.0,40:4.8,45:4.7},high:{10:7.0,15:6.0,20:5.5,25:5.0,30:4.7,35:4.7,40:4.7,45:4.7}};
+
+function getSafemax(cape,regime){
+  const t=CAPE_TBL[regime],ks=Object.keys(t).map(Number).sort((a,b)=>a-b);
+  if(cape<=ks[0])return t[ks[0]];if(cape>=ks[ks.length-1])return t[ks[ks.length-1]];
+  for(let i=0;i<ks.length-1;i++){if(cape>=ks[i]&&cape<=ks[i+1]){const r=(cape-ks[i])/(ks[i+1]-ks[i]);return t[ks[i]]+r*(t[ks[i+1]]-t[ks[i]]);}}
+  return 4.7;
+}
+
+function updateRetirement(){
+  const cape=+document.getElementById('rCape').value;
+  const regime=document.getElementById('rRegime').value;
+  const horizon=+document.getElementById('rHorizon').value;
+  const legacy=+document.getElementById('rLegacy').value;
+  const tax=+document.getElementById('rTax').value;
+  const engine=document.getElementById('rEngine').value;
+
+  const sm=getSafemax(cape,regime);
+  let adj=sm;
+  if(horizon<30)adj+=(30-horizon)*0.1;
+  if(horizon>30)adj-=(horizon-30)*0.08;
+  if(legacy>0)adj-=legacy*0.015;
+  adj=Math.max(adj,2.5);
+
+  const netRet=engine==='factor'?0.078:0.082;
+  const infRate=regime==='low'?0.02:regime==='moderate'?0.035:0.055;
+
+  document.getElementById('safemax-display').textContent=adj.toFixed(2)+'%';
+  const yr1=portfolio.base*adj/100;
+  const yr1at=yr1*(1-tax/100);
+  document.getElementById('safemax-sub').textContent=`Universal: ${sm.toFixed(1)}% · Yr 1: ${fmtD(yr1)} · After tax: ${fmtD(yr1at)} · Monthly: ${fmtD(yr1at/12)} · Engine: ${engine==='factor'?'Factor 7.8%':'S&P 8.2%'}`;
+
+  // CAPE table
+  let ct=`<thead><tr><th>CAPE</th><th>Low</th><th>Moderate</th><th>High</th></tr></thead><tbody>`;
+  [10,15,20,25,30,35,40,45].forEach(c=>{
+    const hi=Math.abs(c-cape)<3;
+    ct+=`<tr style="${hi?'background:rgba(91,141,238,0.08);':''}">`;
+    ct+=`<td style="font-weight:${hi?700:400};">${c}</td>`;
+    ['low','moderate','high'].forEach(r=>{
+      const v=CAPE_TBL[r][c]; const act=hi&&r===regime;
+      const col=act?'var(--accent2)':v>=6?'var(--accent3)':v>=5?'var(--accent)':'var(--danger)';
+      ct+=`<td style="color:${col};font-weight:${act?700:400};font-family:'DM Mono',monospace;">${v.toFixed(1)}%</td>`;
+    });
+    ct+=`</tr>`;
+  });
+  ct+=`</tbody>`;
+  document.getElementById('cape-table').innerHTML=ct;
+
+  // Projection
+  let bal=portfolio.base, wd=bal*adj/100;
+  const rows=[];
+  let maxW=0;
+  for(let y=1;y<=horizon;y++){
+    const start=bal;const withdrawal=wd;const afterTax=withdrawal*(1-tax/100);
+    bal-=withdrawal;bal*=(1+netRet);
+    const cwr=start>0?withdrawal/start*100:0;
+    rows.push({year:y,start,withdrawal,afterTax,end:Math.max(bal,0),cwr});
+    if(withdrawal>maxW)maxW=withdrawal;
+    wd*=(1+infRate);
+    if(bal<=0){for(let f=y+1;f<=horizon;f++)rows.push({year:f,start:0,withdrawal:0,afterTax:0,end:0,cwr:0});break;}
+  }
+
+  // Bars
+  document.getElementById('retirement-bars').innerHTML=`
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:4px;">Annual withdrawals (COLA)</div>
+    <div style="display:flex;align-items:flex-end;gap:1px;height:80px;margin-bottom:16px;">
+      ${rows.map(y=>`<div style="flex:1;background:var(--accent3);border-radius:1px 1px 0 0;height:${maxW>0?y.withdrawal/maxW*100:0}%;opacity:0.8;min-height:${y.withdrawal>0?'1px':'0'};"></div>`).join('')}
+    </div>`;
+
+  // Table
+  let rt=`<thead><tr><th>Yr</th><th>Start</th><th>Withdrawal</th><th>After Tax</th><th>End Bal</th><th>CWR</th></tr></thead><tbody>`;
+  rows.forEach(y=>{
+    rt+=`<tr><td>${y.year}</td><td>${fmtD(y.start)}</td><td style="color:var(--accent3);">${fmtD(y.withdrawal)}</td><td style="color:var(--accent2);">${fmtD(y.afterTax)}</td><td style="color:${y.end<portfolio.base*0.3?'var(--danger)':'var(--text)'};">${fmtD(y.end)}</td><td style="color:var(--muted);">${y.cwr.toFixed(1)}%</td></tr>`;
+  });
+  rt+=`</tbody>`;
+  document.getElementById('retirement-table').innerHTML=rt;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   V3: DCP MODEL
+   ═══════════════════════════════════════════════════════════════════ */
+function updateDCP(){
+  const amt=+document.getElementById('dcpAmt').value;
+  const comp=+document.getElementById('dcpComp').value;
+  const inst=+document.getElementById('dcpInst').value;
+  const ret=+document.getElementById('dcpRet').value/100;
+
+  let bal=amt;
+  for(let y=0;y<comp;y++)bal*=(1+ret);
+  const balAtDist=bal;
+
+  const rows=[]; let totalDist=0;
+  for(let i=1;i<=inst;i++){
+    const start=bal;const dist=bal/(inst-i+1);const after=bal-dist;const growth=after*ret;
+    bal=after+growth;totalDist+=dist;
+    rows.push({num:i,start,dist,after,growth,end:bal});
+  }
+
+  document.getElementById('dcp-metrics').innerHTML=`
+    <div class="metric-card"><div class="label">Original deferral</div><div class="value accent">${fmtD(amt)}</div></div>
+    <div class="metric-card"><div class="label">Balance at distribution</div><div class="value accent2">${fmtD(balAtDist)}</div><div class="sub">After ${comp}yr compounding</div></div>
+    <div class="metric-card"><div class="label">Total distributed</div><div class="value accent3">${fmtD(totalDist)}</div><div class="sub">${(totalDist/amt).toFixed(2)}x multiple</div></div>`;
+
+  let dt=`<thead><tr><th>#</th><th>Start</th><th>Distribution</th><th>Remaining</th><th>Growth</th><th>End</th></tr></thead><tbody>`;
+  rows.forEach(r=>{
+    dt+=`<tr><td>${r.num}</td><td>${fmtD(r.start)}</td><td style="color:var(--accent3);">${fmtD(r.dist)}</td><td>${fmtD(r.after)}</td><td style="color:var(--accent2);">${fmtD(r.growth)}</td><td>${fmtD(r.end)}</td></tr>`;
+  });
+  dt+=`</tbody>`;
+  document.getElementById('dcp-table').innerHTML=dt;
+}
+
+/* ═══ INIT ═══ */
+buildOverview();
+buildLocation();
+buildNQDC();
+solveTax();
+buildBurn();
+updateRetirement();
+updateDCP();
+</script>
+</body>
+</html>
