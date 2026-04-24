@@ -406,18 +406,26 @@ function showTab(id) {
 }
 
 function jumpToTaxRow(year) {
-  showTab('tax');
+  /* Activate Tax Alpha tab directly — match button by onclick string, not by index */
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const panel = document.getElementById('tab-tax');
+  if (panel) panel.classList.add('active');
+  document.querySelectorAll('.tab').forEach(t => {
+    if (t.getAttribute('onclick') === "showTab('tax')") t.classList.add('active');
+  });
+  /* Scroll to and highlight the matching year row */
   setTimeout(() => {
     const el = document.getElementById('tax-yr-' + year);
     if (!el) return;
-    el.scrollIntoView({behavior:'smooth', block:'center'});
+    el.scrollIntoView({behavior: 'smooth', block: 'center'});
     el.style.background = 'rgba(91,141,238,0.22)';
     el.style.transition = '';
     setTimeout(() => {
       el.style.transition = 'background 1.8s ease';
       el.style.background = '';
     }, 1200);
-  }, 60);
+  }, 100);
 }
 
 /* ═══════════════════════════════════════════════════════════════════
