@@ -205,7 +205,7 @@ body {
     <div class="subsection">
       <div class="section-title">Fund allocation — SCV tilt + direct indexing</div>
       <table class="fund-table">
-        <thead><tr><th>Fund</th><th>Ticker</th><th>Weight</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
+        <thead><tr><th>Fund</th><th>Ticker</th><th>Weight</th><th>$ Allocated</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
         <tbody id="fund-rows"></tbody>
       </table>
     </div>
@@ -471,15 +471,31 @@ function buildOverview() {
   refreshSummaryMetrics();
 
   /* --- Fund rows --- */
-  document.getElementById('fund-rows').innerHTML = funds.map(f => {
-    const bc = f.loc==='Taxable'?'bucket-taxable':f.loc==='Traditional'?'bucket-trad':'bucket-roth';
-    return `<tr><td>${f.name}</td><td class="ticker">${f.ticker}</td><td>${f.weight}%</td><td>${f.er}</td><td>${f.cat}</td><td class="${bc}">${f.loc}</td></tr>`;
-  }).join('');
+  buildFundRows();
 
   /* --- Alpha cards --- */
   document.getElementById('alpha-cards').innerHTML = alphas.map(a =>
     `<div class="alpha-card"><h3 style="color:${a.color};">${a.title}</h3><p>${a.desc}</p></div>`
   ).join('');
+}
+
+function buildFundRows() {
+  const total = stateBase();
+  /* Per-location account pools so we can show which bucket each fund draws from */
+  const acctBal = {Taxable: state.taxable, Traditional: state.traditional, Roth: state.roth};
+  document.getElementById('fund-rows').innerHTML = funds.map(f => {
+    const bc = f.loc==='Taxable'?'bucket-taxable':f.loc==='Traditional'?'bucket-trad':'bucket-roth';
+    const dollars = (f.weight / 100) * total;
+    return `<tr>
+      <td>${f.name}</td>
+      <td class="ticker">${f.ticker}</td>
+      <td>${f.weight}%</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;">${fmtD(dollars)}</td>
+      <td>${f.er}</td>
+      <td>${f.cat}</td>
+      <td class="${bc}">${f.loc}</td>
+    </tr>`;
+  }).join('');
 }
 
 function buildAdditionsTable() {
@@ -557,6 +573,7 @@ function onPortfolioChange() {
   if(mb) mb.textContent=fmtM(base);
   if(ma) ma.textContent=fmtM(add);
   if(mt) mt.textContent=fmtM(base+add);
+  buildFundRows();
   buildLocation();
   updateRetirement();
 }
@@ -741,32 +758,115 @@ function updateRetirement(){
   ct+=`</tbody>`;
   document.getElementById('cape-table').innerHTML=ct;
 
-  // Projection
-  let bal=base, wd=bal*adj/100;
-  const rows=[];
-  let maxW=0;
-  for(let y=1;y<=horizon;y++){
-    const start=bal;const withdrawal=wd;const afterTax=withdrawal*(1-tax/100);
-    bal-=withdrawal;bal*=(1+netRet);
-    const cwr=start>0?withdrawal/start*100:0;
-    rows.push({year:y,start,withdrawal,afterTax,end:Math.max(bal,0),cwr});
-    if(withdrawal>maxW)maxW=withdrawal;
-    wd*=(1+infRate);
-    if(bal<=0){for(let f=y+1;f<=horizon;f++)rows.push({year:f,start:0,withdrawal:0,afterTax:0,end:0,cwr:0});break;}
+  // Per-account balances — withdrawal priority: DCP → Taxable → Traditional → Roth
+  let balDCP  = state.dcp;
+  let balTax  = state.taxable;
+  let balTrad = state.traditional;
+  let balRoth = state.roth;
+  let wd = base * adj / 100; // Year-1 withdrawal (SAFEMAX × total portfolio)
+
+  const rows = [];
+  let maxW = 0;
+
+  for (let y = 1; y <= horizon; y++) {
+    const totalStart = balDCP + balTax + balTrad + balRoth;
+    if (totalStart <= 0) {
+      for (let f = y; f <= horizon; f++)
+        rows.push({year:f,start:0,dcpDraw:0,taxDraw:0,tradDraw:0,rothDraw:0,totalDraw:0,afterTax:0,end:0,cwr:0});
+      break;
+    }
+
+    let need = wd;
+
+    // 1. DCP first (ordinary income tax)
+    const dcpDraw  = Math.min(need, Math.max(0, balDCP));
+    balDCP  = Math.max(0, balDCP  - dcpDraw);  need -= dcpDraw;
+
+    // 2. Taxable (LTCG — half effective rate)
+    const taxDraw  = Math.min(need, Math.max(0, balTax));
+    balTax  = Math.max(0, balTax  - taxDraw);  need -= taxDraw;
+
+    // 3. Traditional (ordinary income tax)
+    const tradDraw = Math.min(need, Math.max(0, balTrad));
+    balTrad = Math.max(0, balTrad - tradDraw); need -= tradDraw;
+
+    // 4. Roth last (tax-free)
+    const rothDraw = Math.min(need, Math.max(0, balRoth));
+    balRoth = Math.max(0, balRoth - rothDraw);
+
+    const totalDraw = dcpDraw + taxDraw + tradDraw + rothDraw;
+    // After-tax: DCP & Trad at full rate, Taxable at LTCG (~half), Roth = 0
+    const afterTax = (dcpDraw + tradDraw) * (1 - tax/100)
+                   + taxDraw * (1 - tax/200)
+                   + rothDraw;
+
+    // Grow remaining balances
+    balDCP  *= (1 + netRet);
+    balTax  *= (1 + netRet);
+    balTrad *= (1 + netRet);
+    balRoth *= (1 + netRet);
+
+    const totalEnd = balDCP + balTax + balTrad + balRoth;
+    const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
+
+    rows.push({year:y, start:totalStart, dcpDraw, taxDraw, tradDraw, rothDraw, totalDraw, afterTax, end:totalEnd, cwr,
+               endDCP:balDCP, endTax:balTax, endTrad:balTrad, endRoth:balRoth});
+    if (totalDraw > maxW) maxW = totalDraw;
+    wd *= (1 + infRate);
   }
 
-  document.getElementById('retirement-bars').innerHTML=`
-    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:4px;">Annual withdrawals (COLA)</div>
+  // Withdrawal source stacked bar (colour-coded by account)
+  document.getElementById('retirement-bars').innerHTML = `
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:6px;">Annual withdrawals by source — priority: DCP → Taxable → Traditional → Roth</div>
+    <div class="legend" style="margin-bottom:6px;">
+      <span class="legend-item"><span class="legend-dot" style="background:var(--dcp-color);"></span>DCP</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Taxable</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional</span>
+      <span class="legend-item"><span class="legend-dot" style="background:var(--roth-color);"></span>Roth</span>
+    </div>
     <div style="display:flex;align-items:flex-end;gap:1px;height:80px;margin-bottom:16px;">
-      ${rows.map(y=>`<div style="flex:1;background:var(--accent3);border-radius:1px 1px 0 0;height:${maxW>0?y.withdrawal/maxW*100:0}%;opacity:0.8;min-height:${y.withdrawal>0?'1px':'0'};"></div>`).join('')}
+      ${rows.map(r => {
+        const h = maxW > 0 ? r.totalDraw / maxW * 100 : 0;
+        const dcpPct  = r.totalDraw > 0 ? r.dcpDraw  / r.totalDraw * 100 : 0;
+        const taxPct  = r.totalDraw > 0 ? r.taxDraw  / r.totalDraw * 100 : 0;
+        const tradPct = r.totalDraw > 0 ? r.tradDraw / r.totalDraw * 100 : 0;
+        const rothPct = r.totalDraw > 0 ? r.rothDraw / r.totalDraw * 100 : 0;
+        return `<div style="flex:1;height:${h}%;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden;min-height:${r.totalDraw>0?'1px':'0'};">
+          <div style="height:${dcpPct}%;background:var(--dcp-color);"></div>
+          <div style="height:${taxPct}%;background:var(--taxable-color);"></div>
+          <div style="height:${tradPct}%;background:var(--trad-color);"></div>
+          <div style="height:${rothPct}%;background:var(--roth-color);"></div>
+        </div>`;
+      }).join('')}
     </div>`;
 
-  let rt=`<thead><tr><th>Yr</th><th>Start</th><th>Withdrawal</th><th>After Tax</th><th>End Bal</th><th>CWR</th></tr></thead><tbody>`;
-  rows.forEach(y=>{
-    rt+=`<tr><td>${y.year}</td><td>${fmtD(y.start)}</td><td style="color:var(--accent3);">${fmtD(y.withdrawal)}</td><td style="color:var(--accent2);">${fmtD(y.afterTax)}</td><td style="color:${y.end<base*0.3?'var(--danger)':'var(--text)'};">${fmtD(y.end)}</td><td style="color:var(--muted);">${y.cwr.toFixed(1)}%</td></tr>`;
+  let rt = `<thead><tr>
+    <th>Yr</th>
+    <th style="color:var(--dcp-color);">DCP Draw</th>
+    <th style="color:var(--taxable-color);">Taxable Draw</th>
+    <th style="color:var(--trad-color);">Trad Draw</th>
+    <th style="color:var(--roth-color);">Roth Draw</th>
+    <th>Total Draw</th>
+    <th>After-Tax</th>
+    <th>End Balance</th>
+    <th>CWR</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r => {
+    const warn = r.end < base * 0.3;
+    rt += `<tr>
+      <td>${r.year}</td>
+      <td style="color:var(--dcp-color);font-family:'DM Mono',monospace;">${r.dcpDraw>0?fmtD(r.dcpDraw):'—'}</td>
+      <td style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${r.taxDraw>0?fmtD(r.taxDraw):'—'}</td>
+      <td style="color:var(--trad-color);font-family:'DM Mono',monospace;">${r.tradDraw>0?fmtD(r.tradDraw):'—'}</td>
+      <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
+      <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalDraw)}</td>
+      <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
+      <td style="color:${warn?'var(--danger)':'var(--text)'};font-family:'DM Mono',monospace;">${fmtD(r.end)}</td>
+      <td style="color:var(--muted);font-family:'DM Mono',monospace;">${r.cwr.toFixed(1)}%</td>
+    </tr>`;
   });
-  rt+=`</tbody>`;
-  document.getElementById('retirement-table').innerHTML=rt;
+  rt += `</tbody>`;
+  document.getElementById('retirement-table').innerHTML = rt;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
