@@ -100,6 +100,11 @@ body {
 .filing-btn { padding: 6px 14px; border-radius: 4px; border: none; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--muted); background: transparent; font-family: 'DM Sans', sans-serif; transition: all 0.2s; }
 .filing-btn.active { color: var(--accent); background: var(--surface); }
 
+.engine-toggle { display: flex; gap: 2px; background: var(--surface2); border-radius: 6px; padding: 3px; }
+.engine-btn { padding: 5px 12px; border-radius: 4px; border: none; cursor: pointer; font-size: 11px; font-weight: 500; color: var(--muted); background: transparent; font-family: 'DM Mono', monospace; transition: all 0.2s; white-space: nowrap; }
+.engine-btn:hover { color: var(--text); }
+.engine-btn.active { color: var(--accent3); background: var(--surface); }
+
 .tc-row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; font-size: 13px; }
 .tc-row.indent { padding-left: 16px; color: var(--muted); font-size: 12px; }
 .tc-row .val { font-family: 'DM Mono', monospace; font-weight: 500; text-align: right; }
@@ -230,7 +235,14 @@ body {
     <div class="metrics" id="overview-metrics"></div>
 
     <div class="subsection">
-      <div class="section-title">Fund allocation — SCV tilt + direct indexing</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+        <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;color:var(--text);" id="fund-alloc-title">Fund allocation</div>
+        <div class="engine-toggle" id="engine-toggle-overview">
+          <button class="engine-btn active" onclick="setReturnEngine('factor')">Factor (7.8%)</button>
+          <button class="engine-btn" onclick="setReturnEngine('sp500')">S&amp;P Blend (8.2%)</button>
+          <button class="engine-btn" onclick="setReturnEngine('merriman')">Merriman WW (10%)</button>
+        </div>
+      </div>
       <table class="fund-table">
         <thead><tr><th>Fund</th><th>Ticker</th><th>Within-Account</th><th>Portfolio %</th><th>$ Allocated</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
         <tbody id="fund-rows"></tbody>
@@ -344,7 +356,7 @@ body {
       <div class="alpha-card">
         <div class="input-group"><label>Legacy goal %</label><input type="number" class="v3-input" id="rLegacy" value="0" min="0" max="100" step="5" onchange="updateRetirement()"></div>
         <div class="input-group"><label>Eff. tax rate %</label><input type="number" class="v3-input" id="rTax" value="35" min="0" max="50" onchange="updateRetirement()"></div>
-        <div class="input-group"><label>Return engine</label><select class="v3-input v3-select" id="rEngine" onchange="updateRetirement()"><option value="factor" selected>Factor Portfolio (7.8%)</option><option value="sp500">S&P Blend (8.2%)</option></select></div>
+        <div class="input-group"><label>Return engine</label><select class="v3-input v3-select" id="rEngine" onchange="setReturnEngine(this.value)"><option value="factor" selected>Factor Portfolio (7.8%)</option><option value="sp500">S&amp;P Blend (8.2%)</option><option value="merriman">Merriman Worldwide All Value (10%)</option></select></div>
       </div>
     </div>
     <div class="subsection">
@@ -474,14 +486,61 @@ function stateTotalAdd() { return state.additions.reduce((s,a) => s+a.taxable+a.
    ═══════════════════════════════════════════════════════════════════ */
 /* withinAcct: % of that account's balance allocated to this fund.
    Must sum to 100% per account (Taxable, Traditional, Roth). */
-const funds = [
-  {name:'Direct Index US Large Value', ticker:'DI-AVLV', withinAcct:60,   er:0.20, cat:'US Large Value',   loc:'Taxable',     rationale:'Direct indexing — daily TLH on individual lots, FTC-eligible'},
-  {name:'Direct Index Intl Value',     ticker:'DI-DFIV', withinAcct:40,   er:0.30, cat:'Intl Value',       loc:'Taxable',     rationale:'Direct indexing intl — FTC recovery + systematic TLH'},
-  {name:'Avantis US Small Cap Value',  ticker:'AVUV',    withinAcct:50,   er:0.25, cat:'US Small Value',   loc:'Traditional', rationale:'SCV tilt — dominant factor premium, sheltered from tax'},
-  {name:'Avantis Intl Small Cap Value',ticker:'AVDV',    withinAcct:41.7, er:0.36, cat:'Intl Small Value', loc:'Traditional', rationale:'Intl SCV — high yield sheltered from ordinary income tax'},
-  {name:'Private Credit Fund',         ticker:'PRIV-CR', withinAcct:8.3,  er:0.85, cat:'Private Credit',   loc:'Traditional', rationale:'Illiquidity premium, 8-10% yield sheltered from ordinary tax'},
-  {name:'Avantis EM Value',            ticker:'AVES',    withinAcct:100,  er:0.36, cat:'EM Value',         loc:'Roth',        rationale:'Highest growth + volatility — tax-free compounding in Roth'},
-];
+const fundSets = {
+  factor: [
+    {name:'Direct Index US Large Value', ticker:'DI-AVLV', withinAcct:60,   er:0.20, cat:'US Large Value',   loc:'Taxable',     rationale:'Direct indexing — daily TLH on individual lots, FTC-eligible'},
+    {name:'Direct Index Intl Value',     ticker:'DI-DFIV', withinAcct:40,   er:0.30, cat:'Intl Value',       loc:'Taxable',     rationale:'Direct indexing intl — FTC recovery + systematic TLH'},
+    {name:'Avantis US Small Cap Value',  ticker:'AVUV',    withinAcct:50,   er:0.25, cat:'US Small Value',   loc:'Traditional', rationale:'SCV tilt — dominant factor premium, sheltered from tax'},
+    {name:'Avantis Intl Small Cap Value',ticker:'AVDV',    withinAcct:41.7, er:0.36, cat:'Intl Small Value', loc:'Traditional', rationale:'Intl SCV — high yield sheltered from ordinary income tax'},
+    {name:'Private Credit Fund',         ticker:'PRIV-CR', withinAcct:8.3,  er:0.85, cat:'Private Credit',   loc:'Traditional', rationale:'Illiquidity premium, 8-10% yield sheltered from ordinary tax'},
+    {name:'Avantis EM Value',            ticker:'AVES',    withinAcct:100,  er:0.36, cat:'EM Value',         loc:'Roth',        rationale:'Highest growth + volatility — tax-free compounding in Roth'},
+  ],
+  sp500: [
+    {name:'Vanguard S&P 500 ETF',        ticker:'VOO',     withinAcct:60,   er:0.03, cat:'US Large Blend',   loc:'Taxable',     rationale:'Core US market — ultra-low ER, tax-efficient, qualified dividends'},
+    {name:'Vanguard Total Intl ETF',     ticker:'VXUS',    withinAcct:40,   er:0.07, cat:'Intl Total Market',loc:'Taxable',     rationale:'Global diversification — FTC recovery, completes world market'},
+    {name:'Vanguard S&P 500 ETF',        ticker:'VOO',     withinAcct:55,   er:0.03, cat:'US Large Blend',   loc:'Traditional', rationale:'Broad US market — dividend income sheltered from ordinary tax'},
+    {name:'Vanguard FTSE Dev Mkts ETF',  ticker:'VEA',     withinAcct:35,   er:0.05, cat:'Intl Developed',   loc:'Traditional', rationale:'Developed intl — income sheltered, diversification vs US'},
+    {name:'Vanguard Total Bond ETF',     ticker:'BND',     withinAcct:10,   er:0.03, cat:'US Bonds',         loc:'Traditional', rationale:'Bond income sheltered from ordinary tax — must not hold in taxable'},
+    {name:'Invesco QQQ ETF',             ticker:'QQQ',     withinAcct:100,  er:0.20, cat:'US Large Growth',  loc:'Roth',        rationale:'Tech-heavy growth — maximize tax-free compounding in Roth'},
+  ],
+  merriman: [
+    {name:'Avantis US Large Value ETF',  ticker:'AVLV',    withinAcct:50,   er:0.15, cat:'US Large Value',   loc:'Taxable',     rationale:'Merriman US LV sleeve — value tilt, qualified dividends, FTC-eligible'},
+    {name:'DFA Intl Value ETF',          ticker:'DFIV',    withinAcct:50,   er:0.23, cat:'Intl Large Value', loc:'Taxable',     rationale:'Merriman Intl LV sleeve — DFA factor funds, FTC recovery + value premium'},
+    {name:'Avantis US Small Cap Value',  ticker:'AVUV',    withinAcct:40,   er:0.25, cat:'US Small Value',   loc:'Traditional', rationale:'Merriman US SCV sleeve — dominant SCV premium, high yield sheltered'},
+    {name:'Avantis Intl Small Cap Val',  ticker:'AVDV',    withinAcct:40,   er:0.36, cat:'Intl Small Value', loc:'Traditional', rationale:'Merriman Intl SCV sleeve — dual factor premium (value+size), sheltered'},
+    {name:'Avantis Emerging Markets Val',ticker:'AVES',    withinAcct:20,   er:0.36, cat:'EM Value',         loc:'Traditional', rationale:'Merriman EM sleeve — highest growth + value premium, sheltered'},
+    {name:'Avantis Emerging Markets Val',ticker:'AVES',    withinAcct:100,  er:0.36, cat:'EM Value',         loc:'Roth',        rationale:'EM concentrated — highest expected return + volatility, tax-free in Roth'},
+  ],
+};
+
+let selectedEngine = 'factor';
+let funds = fundSets['factor'];
+
+const engineMeta = {
+  factor:   {label:'Factor Portfolio (7.8%)',          ret:0.078, desc:'SCV tilt · direct indexing · private credit'},
+  sp500:    {label:'S&P 500 Blend (8.2%)',             ret:0.082, desc:'Broad market · low-cost ETFs · bond anchor'},
+  merriman: {label:'Merriman Worldwide All Value (10%)',ret:0.100, desc:'5-sleeve global value · equal-weight asset classes'},
+};
+
+function engineNetRet() { return engineMeta[selectedEngine].ret; }
+
+function setReturnEngine(eng) {
+  if (!fundSets[eng]) return;
+  selectedEngine = eng;
+  funds = fundSets[eng];
+  /* Sync both UI controls */
+  const sel = document.getElementById('rEngine');
+  if (sel && sel.value !== eng) sel.value = eng;
+  document.querySelectorAll('#engine-toggle-overview .engine-btn').forEach(b => {
+    b.classList.toggle('active', b.textContent.toLowerCase().includes(eng === 'factor' ? 'factor' : eng === 'sp500' ? 's&p' : 'merriman'));
+  });
+  buildFundRows();
+  buildLocation();
+  refreshSummaryMetrics();
+  updateRetirement();
+  buildNQDC();
+  buildTaxAlphaTimeline();
+}
 
 const alphas = [
   {title:'Investment Alpha',desc:'SCV-tilted allocation: AVUV 30% / AVDV 25%. Small-cap value premium is the dominant factor. Private credit adds illiquidity premium at 8-10% yield.',color:'var(--accent)'},
@@ -654,8 +713,9 @@ function refreshSummaryMetrics() {
     <div class="metric-card"><div class="label">Total portfolio</div><div class="value accent" id="m-base">${fmtM(base)}</div></div>
     <div class="metric-card"><div class="label">4-yr additions</div><div class="value accent2" id="m-add">${fmtM(add)}</div></div>
     <div class="metric-card"><div class="label">Total capital</div><div class="value" id="m-total">${fmtM(base+add)}</div><div class="sub">30-year horizon</div></div>
-    <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">SCV tilt + DI + private credit</div></div>
-    <div class="metric-card"><div class="label">Blended ER</div><div class="value">${blendedER().toFixed(2)}%</div></div>`;
+    <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">${engineMeta[selectedEngine].desc}</div></div>
+    <div class="metric-card"><div class="label">Blended ER</div><div class="value">${blendedER().toFixed(2)}%</div></div>
+    <div class="metric-card"><div class="label">Return engine</div><div class="value accent3" style="font-size:15px;">${(engineMeta[selectedEngine].ret*100).toFixed(1)}%</div><div class="sub">${engineMeta[selectedEngine].label}</div></div>`;
 }
 
 function updateStateVal(key, val) {
@@ -700,8 +760,7 @@ function onPortfolioChange() {
 /* ═══ LOCATION ═══ */
 function buildLocation() {
   /* Project balances from current age to retireAge using same return as retirement tab */
-  const locEngine  = document.getElementById('rEngine');
-  const locNetRet  = locEngine && locEngine.value === 'sp500' ? 0.082 : 0.078;
+  const locNetRet  = engineNetRet();
   const locAccumYr = Math.max(0, state.retireAge - state.currentAge);
   let retTax = state.taxable, retTrad = state.traditional, retRoth = state.roth, retDCP = state.dcp;
   for (let y = 0; y < locAccumYr; y++) {
@@ -715,7 +774,7 @@ function buildLocation() {
 
   /* Update subtitle */
   const sub = document.getElementById('loc-retire-subtitle');
-  if (sub) sub.textContent = `Dollar allocations projected at retirement (age ${state.retireAge}) · ${(locNetRet*100).toFixed(1)}% annual return · ${locAccumYr}-yr accumulation`;
+  if (sub) sub.textContent = `Dollar allocations projected at retirement (age ${state.retireAge}) · ${engineMeta[selectedEngine].label} · ${(locNetRet*100).toFixed(1)}% annual return · ${locAccumYr}-yr accumulation`;
 
   /* Helper: retirement-date dollar for a fund */
   const retAcctBal = loc => loc==='Taxable'?retTax:loc==='Traditional'?retTrad:retRoth;
@@ -788,8 +847,7 @@ function buildLocation() {
 
 /* ═══ NQDC / DCP draw schedule ═══ */
 function buildNQDC() {
-  const engine = document.getElementById('rEngine');
-  const netRet = engine && engine.value === 'sp500' ? 0.082 : 0.078;
+  const netRet = engineNetRet();
   const accumYears = Math.max(0, state.retireAge - state.currentAge);
   /* Accumulate DCP from current age to retirement */
   let bal = state.dcp;
@@ -831,13 +889,12 @@ function buildTaxAlphaTimeline() {
   const regime  = document.getElementById('rRegime').value;
   const horizon = +document.getElementById('rHorizon').value;
   const tax     = +document.getElementById('rTax').value;
-  const engine  = document.getElementById('rEngine').value;
   const sm = getSafemax(cape, regime);
   let adj = sm;
   if (horizon < 30) adj += (30 - horizon) * 0.1;
   if (horizon > 30) adj -= (horizon - 30) * 0.08;
   adj = Math.max(adj, 2.5);
-  const netRet  = engine === 'sp500' ? 0.082 : 0.078;
+  const netRet  = engineNetRet();
   const infRate = regime === 'low' ? 0.02 : regime === 'moderate' ? 0.035 : 0.055;
   const DIV_YIELD = 0.02;
 
@@ -1110,7 +1167,6 @@ function updateRetirement(){
   const horizon=+document.getElementById('rHorizon').value;
   const legacy=+document.getElementById('rLegacy').value;
   const tax=+document.getElementById('rTax').value;
-  const engine=document.getElementById('rEngine').value;
 
   const sm=getSafemax(cape,regime);
   let adj=sm;
@@ -1119,7 +1175,7 @@ function updateRetirement(){
   if(legacy>0)adj-=legacy*0.015;
   adj=Math.max(adj,2.5);
 
-  const netRet=engine==='factor'?0.078:0.082;
+  const netRet=engineNetRet();
   const infRate=regime==='low'?0.02:regime==='moderate'?0.035:0.055;
 
   /* CAPE table */
