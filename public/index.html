@@ -409,30 +409,6 @@ body {
     <table class="nqdc-table" id="dcp-table"></table>
   </div>
 
-  <!-- ═══ V2 vs V1 (V1 original) ═══ -->
-  <div id="tab-v2diff" class="tab-panel">
-    <div class="section-title">V2 enhancements over V1 baseline</div>
-    <p style="font-size:13px; color:var(--muted); margin-bottom:20px;">Three changes that compound to an estimated 0.8–1.5% annual after-tax return improvement over V1.</p>
-    <div class="alpha-grid" style="grid-template-columns:1fr 1fr 1fr;">
-      <div class="alpha-card" style="border-left:3px solid var(--accent2);"><h3 style="color:var(--accent2);">Direct indexing in taxable</h3><p><strong style="color:var(--text);">V1:</strong> ETFs (AVLV, DFIV) in taxable<br><strong style="color:var(--text);">V2:</strong> Direct index (DI-AVLV, DI-DFIV)</p><p style="margin-top:8px;"><strong style="color:var(--accent2);">Alpha added:</strong> +0.5–1.5%/yr from daily TLH on individual lots.</p></div>
-      <div class="alpha-card" style="border-left:3px solid var(--accent);"><h3 style="color:var(--accent);">SCV tilt (30/25)</h3><p><strong style="color:var(--text);">V1:</strong> Equal weight 20% each<br><strong style="color:var(--text);">V2:</strong> AVUV 30% / AVDV 25%</p><p style="margin-top:8px;"><strong style="color:var(--accent);">Alpha added:</strong> +0.5–1.0%/yr from overweighting the dominant factor premium.</p></div>
-      <div class="alpha-card" style="border-left:3px solid var(--accent3);"><h3 style="color:var(--accent3);">Private credit in Traditional</h3><p><strong style="color:var(--text);">V1:</strong> 100% equity in Traditional<br><strong style="color:var(--text);">V2:</strong> 5% private credit (8-10% yield)</p><p style="margin-top:8px;"><strong style="color:var(--accent3);">Alpha added:</strong> Illiquidity premium sheltered from ordinary income tax.</p></div>
-    </div>
-    <div class="subsection" style="margin-top:24px;">
-      <div class="section-title">30-year projected impact</div>
-      <table class="fund-table">
-        <thead><tr><th>Metric</th><th>V1 Baseline</th><th>V2 Enhanced</th><th>Delta</th></tr></thead>
-        <tbody>
-          <tr><td>Allocation</td><td>Equal weight 20%</td><td>SCV tilt 30/25/15/15/10 + 5% priv credit</td><td style="color:var(--accent3);">Concentrated factor</td></tr>
-          <tr><td>Taxable strategy</td><td>ETFs (AVLV, DFIV)</td><td>Direct indexing</td><td style="color:var(--accent3);">+TLH alpha</td></tr>
-          <tr><td>Blended ER</td><td>0.28%</td><td>0.31%</td><td style="color:var(--danger);">+0.03%</td></tr>
-          <tr><td>Est. annual after-tax alpha</td><td>Baseline</td><td>+0.8–1.5%</td><td style="color:var(--accent3);">Significant</td></tr>
-          <tr><td>30-yr impact on $10M</td><td>~$100M</td><td>~$115–130M</td><td style="color:var(--accent3);">+$15–30M</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
   <!-- ═══ ABOUT ═══ -->
   <div id="tab-about" class="tab-panel">
     <div class="about-hero">
@@ -518,9 +494,9 @@ body {
    TABS
    ═══════════════════════════════════════════════════════════════════ */
 const tabDefs = [
-  ['overview','Overview'],['location','Location Alpha'],['tax','Tax Alpha'],
-  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['burn','Burn Stages'],
-  ['retirement','Retirement'],['v2diff','V2 vs V1'],['about','About']
+  ['overview','Overview'],['burn','Burn Stages'],['retirement','Retirement'],
+  ['location','Location Alpha'],['tax','Tax Alpha'],
+  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
