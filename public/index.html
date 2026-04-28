@@ -225,6 +225,22 @@ body {
 .surplus-pos { color: var(--accent2); }
 .surplus-neg { color: var(--danger); }
 
+/* Portfolio mode toggle */
+.pmode-bar { display:flex; gap:4px; background:var(--surface2); border-radius:8px; padding:4px; width:fit-content; margin-bottom:20px; }
+.pmode-btn { padding:8px 20px; border-radius:6px; border:none; cursor:pointer; font-size:12px; font-weight:500; color:var(--muted); background:transparent; font-family:'DM Sans',sans-serif; transition:all 0.2s; }
+.pmode-btn:hover { color:var(--text); }
+.pmode-btn.active { color:var(--accent); background:var(--surface); box-shadow:0 1px 3px rgba(0,0,0,0.3); }
+
+/* Net worth chart */
+.nw-chart-wrap { position:relative; margin-bottom:20px; }
+.nw-bars { display:flex; align-items:flex-end; gap:1px; height:200px; }
+.nw-bar-col { flex:1; display:flex; flex-direction:column-reverse; min-width:2px; border-radius:1px 1px 0 0; overflow:hidden; cursor:default; }
+.nw-bar-col:hover { filter:brightness(1.2); }
+.nw-divider { position:absolute; bottom:0; width:2px; background:var(--accent); opacity:0.6; pointer-events:none; }
+.nw-divider-label { position:absolute; bottom:105%; font-size:9px; color:var(--accent); font-family:'DM Mono',monospace; white-space:nowrap; transform:translateX(-50%); }
+.nw-age-bar { display:flex; gap:1px; margin-top:3px; }
+.nw-age-tick { flex:1; font-size:8px; color:var(--muted); font-family:'DM Mono',monospace; text-align:center; overflow:hidden; }
+
 /* Custom portfolio builder */
 .cp-table { width:100%; border-collapse:collapse; }
 .cp-table th { text-align:left; padding:8px 10px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; font-family:'DM Mono',monospace; border-bottom:1px solid var(--border); white-space:nowrap; }
@@ -257,39 +273,83 @@ body {
 <div class="container">
   <div class="tabs" id="tab-bar"></div>
 
-  <!-- ═══ OVERVIEW (V1) ═══ -->
+  <!-- ═══ MY PORTFOLIO + ACCUMULATION ═══ -->
   <div id="tab-overview" class="tab-panel active">
 
-    <div class="subsection">
-      <div class="section-title">Starting portfolio</div>
-      <div id="portfolio-inputs"></div>
+    <!-- ── Section 1: My Portfolio ─────────────────────── -->
+    <div class="section-title">My Portfolio</div>
+
+    <!-- Mode selector -->
+    <div class="pmode-bar">
+      <button id="pmode-btn-model"  class="pmode-btn active" onclick="setPortfolioMode('model')">Use a Model Portfolio</button>
+      <button id="pmode-btn-custom" class="pmode-btn"        onclick="setPortfolioMode('custom')">Enter My Own Holdings</button>
     </div>
 
-    <div class="subsection">
-      <div class="section-title" id="additions-title">Annual funding</div>
-      <div id="additions-section"></div>
-    </div>
+    <!-- Portfolio balances — always visible, updated on mode switch / activation -->
+    <div id="portfolio-inputs" style="margin-bottom:20px;"></div>
 
-    <div class="metrics" id="overview-metrics"></div>
-
-    <div class="subsection">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;padding-bottom:8px;border-bottom:1px solid var(--border);">
-        <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:600;color:var(--text);" id="fund-alloc-title">Fund allocation</div>
+    <!-- ── Model mode ── -->
+    <div id="pmode-model-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);">
+        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:600;color:var(--text);">Fund allocation</div>
         <div class="engine-toggle" id="engine-toggle-overview">
           <button class="engine-btn active" onclick="setReturnEngine('factor')">Factor (7.8%)</button>
           <button class="engine-btn" onclick="setReturnEngine('sp500')">S&amp;P Blend (8.2%)</button>
           <button class="engine-btn" onclick="setReturnEngine('merriman')">Merriman WW (10%)</button>
         </div>
       </div>
-      <table class="fund-table">
+      <table class="fund-table" style="margin-bottom:24px;">
         <thead><tr><th>Fund</th><th>Ticker</th><th>Within-Account</th><th>Portfolio %</th><th>$ Allocated</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
         <tbody id="fund-rows"></tbody>
       </table>
+      <div class="subsection">
+        <div class="section-title">Four-alpha framework</div>
+        <div class="alpha-grid" id="alpha-cards"></div>
+      </div>
     </div>
+
+    <!-- ── Custom holdings mode ── -->
+    <div id="pmode-custom-section" style="display:none;">
+      <div class="v3-grid2" style="margin-bottom:20px;">
+        <div class="alpha-card">
+          <div class="input-group">
+            <label>Portfolio name</label>
+            <input type="text" class="v3-input" id="cp-name" value="My Portfolio" maxlength="40"
+              oninput="customPort.name=this.value">
+          </div>
+          <div class="input-group" style="margin-bottom:0;">
+            <label>Expected annual return % <small style="color:var(--muted);text-transform:none;letter-spacing:0;">(leave blank to auto-estimate)</small></label>
+            <input type="number" class="v3-input" id="cp-ret-override" placeholder="auto"
+              min="1" max="25" step="0.1"
+              oninput="customPort.manualRet=this.value?+this.value/100:null; cpRenderStats()">
+          </div>
+        </div>
+        <div class="alpha-card" id="cp-stats" style="display:flex;flex-direction:column;justify-content:center;">
+          <div style="color:var(--muted);font-size:12px;font-family:'DM Mono',monospace;">Add holdings to see summary</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:600;">Holdings</div>
+        <button class="io-btn" onclick="cpAddRow()" style="font-size:12px;padding:7px 16px;">+ Add Holding</button>
+      </div>
+      <div id="cp-holdings-table" style="overflow-x:auto;margin-bottom:12px;"></div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:18px;line-height:1.6;">
+        Known tickers (VOO, VTI, AVUV, BND, SCHD…) auto-fill fund name, ER, and category. Account type drives tax-location logic in every tab. Dollar values become your portfolio balances when you activate.
+      </p>
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <button class="cp-activate-btn" id="cp-activate-btn" onclick="cpActivate()">Activate This Portfolio →</button>
+        <span id="cp-activate-status" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+      </div>
+    </div>
+
+    <!-- ── Section 2: Accumulation ─────────────────────── -->
+    <div class="section-title" style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border);">Accumulation</div>
     <div class="subsection">
-      <div class="section-title">Four-alpha framework</div>
-      <div class="alpha-grid" id="alpha-cards"></div>
+      <div style="font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;color:var(--text);margin-bottom:12px;" id="additions-title">Annual funding</div>
+      <div id="additions-section"></div>
     </div>
+    <div class="metrics" id="overview-metrics"></div>
+
   </div>
 
   <!-- ═══ LOCATION ALPHA (V1) ═══ -->
@@ -400,46 +460,25 @@ body {
     </div>
   </div>
 
-  <!-- ═══ MY PORTFOLIO ═══ -->
-  <div id="tab-myportfolio" class="tab-panel">
-    <div class="section-title">My Portfolio</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Enter your actual holdings below. Ticker symbols auto-fill fund name, ER, and category. When you activate, your balances and fund mix update across every tab.</p>
-
-    <div class="v3-grid2" style="margin-bottom:24px;">
-      <div class="alpha-card">
-        <div class="input-group">
-          <label>Portfolio name</label>
-          <input type="text" class="v3-input" id="cp-name" value="My Portfolio" maxlength="40"
-            oninput="customPort.name=this.value">
-        </div>
-        <div class="input-group" style="margin-bottom:0;">
-          <label>Expected annual return % <small style="color:var(--muted);text-transform:none;letter-spacing:0;">(leave blank to auto-estimate)</small></label>
-          <input type="number" class="v3-input" id="cp-ret-override" placeholder="auto"
-            min="1" max="25" step="0.1"
-            oninput="customPort.manualRet=this.value?+this.value/100:null; cpRenderStats()">
-        </div>
+  <!-- ═══ NET WORTH ═══ -->
+  <div id="tab-networth" class="tab-panel">
+    <div class="section-title">Net Worth Trajectory</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
+      Your net worth from today through accumulation and into retirement — taxable, traditional, and Roth stacked year by year.
+      The vertical line marks your target retirement age.
+    </p>
+    <div class="metrics" id="nw-metrics" style="margin-bottom:24px;"></div>
+    <div class="nw-chart-wrap">
+      <div class="legend" style="margin-bottom:10px;">
+        <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Taxable</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--roth-color);"></span>Roth</span>
       </div>
-      <div class="alpha-card" id="cp-stats" style="display:flex;flex-direction:column;justify-content:center;">
-        <div style="color:var(--muted);font-size:12px;font-family:'DM Mono',monospace;">Add holdings to see summary</div>
-      </div>
+      <div class="nw-bars" id="nw-bars"></div>
+      <div class="nw-age-bar" id="nw-age-bar"></div>
     </div>
-
-    <div class="subsection">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:600;">Holdings</div>
-        <button class="io-btn" onclick="cpAddRow()" style="font-size:12px;padding:7px 16px;">+ Add Holding</button>
-      </div>
-      <div id="cp-holdings-table" style="overflow-x:auto;"></div>
-      <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">
-        Known tickers auto-fill fund name, ER, dividend yield, and category — all fields remain editable.
-        Account type determines tax location logic in every tab.
-        Dollar values override the Starting Portfolio balances in Overview when you activate.
-      </p>
-    </div>
-
-    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-      <button class="cp-activate-btn" id="cp-activate-btn" onclick="cpActivate()">Activate This Portfolio →</button>
-      <span id="cp-activate-status" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+    <div style="overflow-x:auto;margin-top:24px;">
+      <table class="nqdc-table" id="nw-table" style="min-width:600px;"></table>
     </div>
   </div>
 
@@ -455,7 +494,8 @@ body {
       <table class="cap-table">
         <thead><tr><th>Tab</th><th>What it answers</th><th>Key insight</th></tr></thead>
         <tbody>
-          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Overview</td><td>Where do I stand today, and what will I have at retirement?</td><td>Compound growth across all accounts — taxable, traditional, and Roth — projected to your target age.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">My Portfolio</td><td>What is my portfolio today and how will it grow?</td><td>Choose a model portfolio or enter your own holdings — balances, return engine, and fund allocation update across every tab.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Net Worth</td><td>How does my net worth evolve from now through retirement?</td><td>Year-by-year stacked bar chart across accumulation and retirement phases — see when you peak, and whether your portfolio survives.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Location Alpha</td><td>Am I holding the right funds in the right accounts?</td><td>Tax-location arbitrage: holding bonds in tax-deferred and equities in Roth can add 0.5–1.5%/yr after-tax with zero change in risk.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Tax Alpha</td><td>How does my asset location translate to after-tax dollars over time?</td><td>A timeline of annual tax drag vs. optimized location, showing cumulative dollars saved over your accumulation window.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Estate Alpha</td><td>What is the step-up-in-basis benefit in taxable at death?</td><td>Unrealized gains in taxable accounts vanish at death — a powerful estate tool for appreciated index holdings.</td></tr>
@@ -528,9 +568,9 @@ body {
    TABS
    ═══════════════════════════════════════════════════════════════════ */
 const tabDefs = [
-  ['overview','Overview'],['burn','Burn Stages'],['retirement','Retirement'],
+  ['overview','My Portfolio'],['networth','Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
   ['location','Location Alpha'],['tax','Tax Alpha'],
-  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['myportfolio','My Portfolio'],['about','About']
+  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -543,6 +583,25 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   const idx = tabDefs.findIndex(t => t[0]===id);
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
+}
+
+function setPortfolioMode(mode) {
+  const modelSec  = document.getElementById('pmode-model-section');
+  const customSec = document.getElementById('pmode-custom-section');
+  const btnModel  = document.getElementById('pmode-btn-model');
+  const btnCustom = document.getElementById('pmode-btn-custom');
+  if (!modelSec || !customSec) return;
+  if (mode === 'custom') {
+    modelSec.style.display  = 'none';
+    customSec.style.display = '';
+    if (btnModel)  btnModel.classList.remove('active');
+    if (btnCustom) btnCustom.classList.add('active');
+  } else {
+    modelSec.style.display  = '';
+    customSec.style.display = 'none';
+    if (btnModel)  btnModel.classList.add('active');
+    if (btnCustom) btnCustom.classList.remove('active');
+  }
 }
 
 function jumpToTaxCalc(tradIncome, divIncome, afterTaxTarget) {
@@ -1490,6 +1549,7 @@ function updateRetirement(){
   });
   rt += `</tbody>`;
   document.getElementById('retirement-table').innerHTML = rt;
+  if (typeof buildNetWorth === 'function') buildNetWorth();
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1834,7 +1894,7 @@ function cpRefreshEngineBtn() {
     btn = document.createElement('button');
     btn.id = 'engine-btn-custom';
     btn.className = 'engine-btn';
-    btn.onclick = () => { if (fundSets['custom'].length) setReturnEngine('custom'); else showTab('myportfolio'); };
+    btn.onclick = () => { if (fundSets['custom'].length) setReturnEngine('custom'); else { showTab('overview'); setPortfolioMode('custom'); } };
     toggle.appendChild(btn);
   }
   btn.textContent = customPort.name || 'My Portfolio';
@@ -1890,12 +1950,131 @@ function buildCustomPortfolio() {
   cpRenderStats();
 }
 
+/* ═══ NET WORTH ═══ */
+function buildNetWorth() {
+  const barsEl   = document.getElementById('nw-bars');
+  const ageEl    = document.getElementById('nw-age-bar');
+  const metricsEl= document.getElementById('nw-metrics');
+  const tableEl  = document.getElementById('nw-table');
+  if (!barsEl) return;
+
+  const netRet    = engineNetRet();
+  const accumYrs  = Math.max(0, state.retireAge - state.currentAge);
+  const horizon   = 30;
+
+  /* Accumulation phase */
+  const accum = [];
+  let bTax = state.taxable, bTrad = state.traditional, bRoth = state.roth;
+  for (let y = 0; y <= accumYrs; y++) {
+    accum.push({ age: state.currentAge + y, tax: bTax, trad: bTrad, roth: bRoth, phase: 'accum' });
+    if (y < accumYrs) {
+      if (y < state.additions.length) {
+        const a = state.additions[y];
+        bTax += a.taxable; bTrad += a.traditional; bRoth += a.roth;
+      }
+      bTax *= (1 + netRet); bTrad *= (1 + netRet); bRoth *= (1 + netRet);
+    }
+  }
+
+  /* Retirement phase */
+  const retireEl = document.getElementById('rEngine');
+  const cape     = +(document.getElementById('rCape')   ? document.getElementById('rCape').value   : 28);
+  const regime   = document.getElementById('rRegime')   ? document.getElementById('rRegime').value  : 'moderate';
+  const taxRate  = +(document.getElementById('rTax')    ? document.getElementById('rTax').value     : 35);
+  const sm       = getSafemax ? getSafemax(cape, regime) : 4.2;
+  const infRate  = regime === 'low' ? 0.02 : regime === 'moderate' ? 0.035 : 0.055;
+  const DIV_YIELD= 0.02;
+  const retPf    = bTax + bTrad + bRoth;
+  let wd         = retPf * sm / 100;
+
+  const retire = [];
+  for (let y = 1; y <= horizon; y++) {
+    const age = state.retireAge + y - 1;
+    const divIncome = bTax * DIV_YIELD;
+    let needLeft = Math.max(0, wd - divIncome);
+    const addTax  = Math.min(needLeft, Math.max(0, bTax));
+    bTax = Math.max(0, bTax - addTax); needLeft -= addTax;
+    let addTrad = 0;
+    if (needLeft > 0 && age >= 60) { addTrad = Math.min(needLeft, Math.max(0, bTrad)); bTrad = Math.max(0, bTrad - addTrad); needLeft -= addTrad; }
+    const addRoth = needLeft > 0 ? Math.min(needLeft, Math.max(0, bRoth)) : 0;
+    if (addRoth > 0) bRoth = Math.max(0, bRoth - addRoth);
+    bTax  *= (1 + netRet); bTrad *= (1 + netRet); bRoth *= (1 + netRet);
+    retire.push({ age, tax: bTax, trad: bTrad, roth: bRoth, phase: 'retire' });
+    wd *= (1 + infRate);
+    if (bTax + bTrad + bRoth <= 0) break;
+  }
+
+  const allPts   = [...accum, ...retire];
+  const maxTotal = Math.max(...allPts.map(p => p.tax + p.trad + p.roth));
+  const retireIdx= accum.length - 1;
+
+  /* Summary metrics */
+  const cur   = accum[0];
+  const atRet = accum[accum.length - 1];
+  const peak  = allPts.reduce((a, b) => (a.tax+a.trad+a.roth) >= (b.tax+b.trad+b.roth) ? a : b);
+  const end   = retire.length > 0 ? retire[retire.length - 1] : atRet;
+  const fNW   = v => fmtM(v.tax + v.trad + v.roth);
+
+  metricsEl.innerHTML = `
+    <div class="metric-card"><div class="label">Current net worth</div><div class="value accent3">${fNW(cur)}</div><div class="sub">Age ${cur.age}</div></div>
+    <div class="metric-card" style="border-color:var(--accent)33;"><div class="label">At retirement · age ${state.retireAge}</div><div class="value accent">${fNW(atRet)}</div><div class="sub">${(netRet*100).toFixed(1)}% CAGR · ${accumYrs}-yr compound</div></div>
+    <div class="metric-card" style="border-color:var(--accent2)33;"><div class="label">Peak net worth · age ${peak.age}</div><div class="value accent2">${fNW(peak)}</div><div class="sub">Before withdrawals deplete</div></div>
+    <div class="metric-card"><div class="label">End of horizon · age ${end.age}</div><div class="value" style="color:${(end.tax+end.trad+end.roth)>0?'var(--accent3)':'var(--danger)'};">${fNW(end)}</div><div class="sub">${(end.tax+end.trad+end.roth)>0?'Portfolio survives':'Portfolio depleted'}</div></div>`;
+
+  /* Bar chart */
+  const barW = Math.max(2, Math.floor(700 / allPts.length));
+  barsEl.innerHTML = allPts.map((p, i) => {
+    const total = p.tax + p.trad + p.roth;
+    const hTax  = maxTotal > 0 ? (p.tax  / maxTotal * 200) : 0;
+    const hTrad = maxTotal > 0 ? (p.trad / maxTotal * 200) : 0;
+    const hRoth = maxTotal > 0 ? (p.roth / maxTotal * 200) : 0;
+    const isRetire = (i === retireIdx);
+    return `<div class="nw-bar-col" style="position:relative;${isRetire?'border-right:2px solid var(--accent);':''}cursor:default;"
+      title="Age ${p.age} · ${fmtM(total)}&#10;Taxable: ${fmtM(p.tax)} · Trad: ${fmtM(p.trad)} · Roth: ${fmtM(p.roth)}">
+      <div style="height:${hRoth}px;background:var(--roth-color);opacity:0.85;"></div>
+      <div style="height:${hTrad}px;background:var(--trad-color);opacity:0.85;"></div>
+      <div style="height:${hTax}px;background:var(--taxable-color);opacity:0.85;"></div>
+    </div>`;
+  }).join('');
+
+  ageEl.innerHTML = allPts.map((p, i) => {
+    const showAge = (p.age % 5 === 0) || i === 0 || i === retireIdx || i === allPts.length - 1;
+    const isRetire = (i === retireIdx);
+    return `<div style="flex:1;font-size:8px;color:${isRetire?'var(--accent)':'var(--muted)'};font-family:'DM Mono',monospace;text-align:center;font-weight:${isRetire?600:400};">
+      ${showAge ? p.age : ''}
+    </div>`;
+  }).join('');
+
+  /* Table */
+  const showRows = allPts.filter((_,i) => i%5===0 || i===retireIdx || i===allPts.length-1);
+  tableEl.innerHTML = `
+    <thead><tr>
+      <th>Age</th><th>Phase</th>
+      <th style="color:var(--taxable-color);">Taxable</th>
+      <th style="color:var(--trad-color);">Traditional</th>
+      <th style="color:var(--roth-color);">Roth</th>
+      <th>Total Net Worth</th>
+    </tr></thead>
+    <tbody>${showRows.map(p => {
+      const tot = p.tax + p.trad + p.roth;
+      const isRet = p.age === state.retireAge;
+      return `<tr style="${isRet?'background:var(--surface);border-top:1px solid var(--accent);':''}">
+        <td style="font-family:'DM Mono',monospace;font-weight:${isRet?700:400};color:${isRet?'var(--accent)':''};">${p.age}${isRet?' ★':''}</td>
+        <td style="font-size:11px;color:var(--muted);">${p.phase==='accum'?'Accumulation':'Retirement'}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--taxable-color);">${fmtM(p.tax)}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--trad-color);">${fmtM(p.trad)}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--roth-color);">${fmtM(p.roth)}</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:600;">${fmtM(tot)}</td>
+      </tr>`;
+    }).join('')}</tbody>`;
+}
+
 /* ═══ INIT ═══ */
 buildOverview();
 buildLocation();
 solveTax();
 buildBurn();
-updateRetirement();
+updateRetirement(); /* also calls buildNetWorth() */
 buildTaxAlphaTimeline();
 buildCustomPortfolio();
 </script>
