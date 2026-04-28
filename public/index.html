@@ -362,6 +362,16 @@ body {
         <tbody id="location-rows"></tbody>
       </table>
     </div>
+    <!-- ── Location Alpha Recommendations ── -->
+    <div class="subsection" style="margin-top:8px;">
+      <div class="section-title">Location alpha recommendations</div>
+      <p id="loc-reco-intro" style="font-size:13px;color:var(--muted);margin-bottom:16px;"></p>
+      <div class="metrics" id="loc-reco-metrics" style="margin-bottom:20px;"></div>
+      <div style="overflow-x:auto;">
+        <table class="fund-table" id="loc-reco-table" style="min-width:780px;"></table>
+      </div>
+    </div>
+
     <div class="subsection">
       <div class="section-title">Account balances over 30 years</div>
       <div class="legend" style="margin-bottom:8px;">
@@ -462,10 +472,10 @@ body {
 
   <!-- ═══ NET WORTH ═══ -->
   <div id="tab-networth" class="tab-panel">
-    <div class="section-title">Net Worth Trajectory</div>
+    <div class="section-title">Liquid Net Worth Trajectory</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
-      Your net worth from today through accumulation and into retirement — taxable, traditional, and Roth stacked year by year.
-      The vertical line marks your target retirement age.
+      Liquid investable assets only (taxable + traditional + Roth) — does not include home equity, pensions, or illiquid assets.
+      Shown year by year from today through accumulation and into retirement to age 100. The gold marker is your target retirement age.
     </p>
     <div class="metrics" id="nw-metrics" style="margin-bottom:24px;"></div>
     <div class="nw-chart-wrap">
@@ -495,7 +505,7 @@ body {
         <thead><tr><th>Tab</th><th>What it answers</th><th>Key insight</th></tr></thead>
         <tbody>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">My Portfolio</td><td>What is my portfolio today and how will it grow?</td><td>Choose a model portfolio or enter your own holdings — balances, return engine, and fund allocation update across every tab.</td></tr>
-          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Net Worth</td><td>How does my net worth evolve from now through retirement?</td><td>Year-by-year stacked bar chart across accumulation and retirement phases — see when you peak, and whether your portfolio survives.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Liquid Net Worth</td><td>How do my liquid assets evolve from now through age 100?</td><td>Year-by-year stacked bar chart across accumulation and retirement phases — see when you peak, and whether your portfolio survives to 100.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Location Alpha</td><td>Am I holding the right funds in the right accounts?</td><td>Tax-location arbitrage: holding bonds in tax-deferred and equities in Roth can add 0.5–1.5%/yr after-tax with zero change in risk.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Tax Alpha</td><td>How does my asset location translate to after-tax dollars over time?</td><td>A timeline of annual tax drag vs. optimized location, showing cumulative dollars saved over your accumulation window.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Estate Alpha</td><td>What is the step-up-in-basis benefit in taxable at death?</td><td>Unrealized gains in taxable accounts vanish at death — a powerful estate tool for appreciated index holdings.</td></tr>
@@ -568,7 +578,7 @@ body {
    TABS
    ═══════════════════════════════════════════════════════════════════ */
 const tabDefs = [
-  ['overview','My Portfolio'],['networth','Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
+  ['overview','My Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
   ['location','Location Alpha'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['about','About']
 ];
@@ -958,6 +968,69 @@ function onPortfolioChange() {
 }
 
 /* ═══ LOCATION ═══ */
+/* ── Location alpha helpers ── */
+function getFundDiv(fund) {
+  const db = tickerDB[fund.ticker];
+  if (db && db.div !== undefined) return db.div;
+  const c = (fund.cat || '').toLowerCase();
+  if (c.includes('bond') || c.includes('treasury') || c.includes('credit')) return 3.5;
+  if (c.includes('real estate'))   return 3.8;
+  if (c.includes('covered call'))  return 8.0;
+  if (c.includes('commodit'))      return 0;
+  if (c.includes('growth'))        return 0.6;
+  if (c.includes('small value'))   return 2.0;
+  if (c.includes('value'))         return 2.4;
+  if (c.includes('emerging') || c.includes('intl') || c.includes('international') || c.includes('developed')) return 2.8;
+  return 1.5;
+}
+
+function suggestLocation(fund) {
+  const c   = (fund.cat || '').toLowerCase();
+  const div = getFundDiv(fund);
+  if (c.includes('bond') || c.includes('treasury') || c.includes('credit') || c.includes('inflation'))
+    return { loc:'Traditional', priority:'HIGH',
+             reason:'Interest income = ordinary income (up to 37%). Tax-deferred shields every basis point of yield.' };
+  if (c.includes('real estate'))
+    return { loc:'Traditional', priority:'HIGH',
+             reason:'REIT dividends are mostly non-qualified — taxed at ordinary rates. Must shelter in tax-deferred.' };
+  if (c.includes('covered call'))
+    return { loc:'Traditional', priority:'HIGH',
+             reason:'Option premium is ordinary/short-term income. Tax-deferred converts this to deferred growth.' };
+  if (c.includes('commodit'))
+    return { loc:'Traditional', priority:'MEDIUM',
+             reason:'Gold ETFs face 28% collectibles rate in taxable. Tax-deferred account avoids the surcharge.' };
+  if (c.includes('intl') || c.includes('international') || c.includes('developed') ||
+      c.includes('emerging') || c.startsWith('em '))
+    return { loc:'Taxable', priority:'HIGH',
+             reason:'Foreign Tax Credit (FTC) is only claimable in taxable accounts — worth 0.2–0.7%/yr for international funds. Moving to IRA forfeits this permanently.' };
+  if (div < 1.0 || c.includes('growth'))
+    return { loc:'Roth', priority:'HIGH',
+             reason:'Low-dividend, high-return growth. Maximum tax-free compounding in Roth — every dollar of gain permanently escapes tax.' };
+  if (c.includes('small value') || c.includes('scv'))
+    return { loc:'Roth', priority:'HIGH',
+             reason:'Small cap value carries the dominant factor premium. Highest expected return → Roth to maximize tax-free dollars.' };
+  if (c.includes('private credit') || c.includes('priv'))
+    return { loc:'Traditional', priority:'HIGH',
+             reason:'High-yield private credit income is ordinary income. Tax-deferred essential at 8–10% yield.' };
+  if (div > 2.5)
+    return { loc:'Traditional', priority:'MEDIUM',
+             reason:`Elevated dividend yield (${div}%) creates recurring taxable income. Sheltering in Traditional saves ~${(div*0.37/100*100).toFixed(2)}%/yr in taxes.` };
+  return { loc:'Taxable', priority:'LOW',
+           reason:'Tax-efficient broad index with qualified dividends at LTCG rates. Acceptable in taxable; optimizing other holdings first has larger impact.' };
+}
+
+function annualDragRate(fund, loc) {
+  if (loc === 'Traditional' || loc === 'Roth') return 0;
+  const c   = (fund.cat || '').toLowerCase();
+  const div = getFundDiv(fund) / 100;
+  if (c.includes('bond') || c.includes('treasury') || c.includes('credit') ||
+      c.includes('real estate') || c.includes('covered call')) return div * 0.37;
+  if (c.includes('commodit')) return 0.01 * 0.28;
+  if (c.includes('intl') || c.includes('international') || c.includes('developed') ||
+      c.includes('emerging') || c.startsWith('em ')) return div * 0.10; // effective after FTC
+  return div * 0.15;
+}
+
 function buildLocation() {
   /* Project balances from current age to retireAge using same return as retirement tab */
   const locNetRet  = engineNetRet();
@@ -1008,6 +1081,86 @@ function buildLocation() {
   </tr>`;
 
   document.getElementById('location-rows').innerHTML = locRows + locFooter;
+
+  /* ── Location alpha recommendations ── */
+  const netRet    = locNetRet;
+  const accumYrs  = locAccumYr;
+  const fvFactor  = netRet > 0 ? (Math.pow(1+netRet, accumYrs) - 1) / netRet : accumYrs;
+  const locColors = { Taxable:'var(--taxable-color)', Traditional:'var(--trad-color)', Roth:'var(--roth-color)' };
+  const priorityBadge = p => p==='HIGH'
+    ? `<span style="font-size:9px;background:#e05c5c22;color:var(--danger);padding:2px 5px;border-radius:3px;font-family:'DM Mono',monospace;">HIGH IMPACT</span>`
+    : p==='MEDIUM'
+    ? `<span style="font-size:9px;background:#c8a96e22;color:var(--accent);padding:2px 5px;border-radius:3px;font-family:'DM Mono',monospace;">MEDIUM</span>`
+    : `<span style="font-size:9px;background:#4ecdc422;color:var(--accent3);padding:2px 5px;border-radius:3px;font-family:'DM Mono',monospace;">OPTIMAL ✓</span>`;
+
+  let totalLifetimeAlpha = 0;
+  let suboptimalCount = 0;
+
+  const recoRows = funds.map(f => {
+    const fundVal   = (f.withinAcct/100) * retAcctBal(f.loc);
+    const suggested = suggestLocation(f);
+    const isOptimal = f.loc === suggested.loc;
+    const dragCur   = annualDragRate(f, f.loc);
+    const dragSug   = annualDragRate(f, suggested.loc);
+    const annSaving = fundVal * (dragCur - dragSug);
+    const lifetime  = annSaving * fvFactor;
+    if (!isOptimal && lifetime > 0) { totalLifetimeAlpha += lifetime; suboptimalCount++; }
+    const badge = isOptimal ? priorityBadge('LOW') : priorityBadge(suggested.priority);
+    const lifetimeStr = isOptimal ? '—'
+      : lifetime > 0 ? `<span style="color:var(--accent3);font-weight:600;">+${fmtD(lifetime)}</span>`
+      : '<span style="color:var(--muted);">—</span>';
+    const annualStr = isOptimal ? '—'
+      : annSaving > 0 ? `<span style="color:var(--accent);">+${fmtD(annSaving)}/yr</span>`
+      : '<span style="color:var(--muted);">—</span>';
+    return `<tr>
+      <td class="ticker">${f.ticker}</td>
+      <td style="font-size:12px;max-width:160px;">${f.name}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;color:${locColors[f.loc]||'var(--text)'};">${f.loc}</td>
+      <td>
+        ${isOptimal
+          ? `<span style="color:var(--accent3);font-family:'DM Mono',monospace;font-weight:600;">✓ ${suggested.loc}</span>`
+          : `<span style="font-family:'DM Mono',monospace;font-weight:600;color:${locColors[suggested.loc]||'var(--text)'};">${suggested.loc}</span>`}
+        &nbsp;${badge}
+      </td>
+      <td style="font-size:11px;color:var(--muted);max-width:220px;line-height:1.5;">${suggested.reason}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;">${annualStr}</td>
+      <td style="font-family:'DM Mono',monospace;font-size:12px;">${lifetimeStr}</td>
+    </tr>`;
+  }).join('');
+
+  const recoIntro = document.getElementById('loc-reco-intro');
+  if (recoIntro) {
+    recoIntro.textContent = suboptimalCount === 0
+      ? 'Your current fund locations are optimally placed. No changes suggested.'
+      : `${suboptimalCount} fund${suboptimalCount>1?'s are':' is'} in a sub-optimal account type. Repositioning ${suboptimalCount>1?'them':'it'} could compound an estimated ${fmtD(totalLifetimeAlpha)} in additional after-tax wealth over your ${accumYrs}-year accumulation window.`;
+  }
+
+  const recoMetrics = document.getElementById('loc-reco-metrics');
+  if (recoMetrics) {
+    recoMetrics.innerHTML = `
+      <div class="metric-card" style="border-color:var(--accent3)33;"><div class="label">Estimated lifetime alpha</div><div class="value accent3">${fmtD(totalLifetimeAlpha)}</div><div class="sub">from repositioning sub-optimal funds</div></div>
+      <div class="metric-card"><div class="label">Funds analyzed</div><div class="value">${funds.length}</div><div class="sub">${suboptimalCount} repositioning suggestion${suboptimalCount!==1?'s':''}</div></div>
+      <div class="metric-card"><div class="label">Accumulation window</div><div class="value">${accumYrs} yrs</div><div class="sub">Ages ${state.currentAge}–${state.retireAge} · ${(netRet*100).toFixed(1)}% CAGR</div></div>`;
+  }
+
+  const recoTable = document.getElementById('loc-reco-table');
+  if (recoTable) {
+    recoTable.innerHTML = `
+      <thead><tr>
+        <th>Ticker</th><th>Fund</th>
+        <th>Current Location</th>
+        <th>Suggested Location</th>
+        <th>Why</th>
+        <th>Annual Tax Saved</th>
+        <th>Lifetime Impact</th>
+      </tr></thead>
+      <tbody>${recoRows}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--border);font-weight:700;">
+        <td colspan="5" style="color:var(--muted);font-size:12px;">Total lifetime alpha (compounded at ${(netRet*100).toFixed(1)}% over ${accumYrs} yr)</td>
+        <td></td>
+        <td style="color:var(--accent3);font-family:'DM Mono',monospace;">${totalLifetimeAlpha>0?'+'+fmtD(totalLifetimeAlpha):'Optimally placed'}</td>
+      </tr></tfoot>`;
+  }
 
   /* Account growth bars — 10.5% CAGR (SPY +0.5%), year-by-year with additions in accumulation phase */
   const CAGR = 0.105;
@@ -1960,7 +2113,7 @@ function buildNetWorth() {
 
   const netRet    = engineNetRet();
   const accumYrs  = Math.max(0, state.retireAge - state.currentAge);
-  const horizon   = 30;
+  const horizon   = Math.max(30, 100 - state.retireAge);
 
   /* Accumulation phase */
   const accum = [];
