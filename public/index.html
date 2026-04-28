@@ -1071,13 +1071,25 @@ function buildLocation() {
     </tr>`;
   }).join('');
 
+  /* Determine which accounts actually have fund rows allocated */
+  const acctHasFunds = {Taxable:false, Traditional:false, Roth:false};
+  funds.forEach(f => { if (f.loc in acctHasFunds) acctHasFunds[f.loc] = true; });
+
+  const footerCell = (loc, bal, color) => {
+    if (bal <= 0) return `<td style="color:var(--muted);text-align:center;font-size:11px;">—</td>`;
+    const sub = acctHasFunds[loc]
+      ? `<div style="font-size:11px;color:var(--muted);">funds assigned</div>`
+      : `<div style="font-size:11px;color:var(--accent);font-family:'DM Mono',monospace;">⚠ no fund rows</div>`;
+    return `<td><div style="color:${color};font-family:'DM Mono',monospace;font-weight:700;">${fmtD(bal)}</div>${sub}</td>`;
+  };
+
   /* Account total footer row — retirement-date balances */
-  const locFooter = `<tr style="border-top:2px solid var(--border);font-weight:700;">
-    <td colspan="2" style="color:var(--muted);font-size:12px;">At retirement (age ${state.retireAge})</td>
-    <td><div style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${fmtD(retTax)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
-    <td><div style="color:var(--trad-color);font-family:'DM Mono',monospace;">${fmtD(retTrad)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
-    <td><div style="color:var(--roth-color);font-family:'DM Mono',monospace;">${fmtD(retRoth)}</div><div style="font-size:11px;color:var(--muted);">100% allocated</div></td>
-    <td style="font-size:12px;color:var(--muted);">Total at retirement: ${fmtD(retTax + retTrad + retRoth)}</td>
+  const locFooter = `<tr style="border-top:2px solid var(--border);">
+    <td colspan="2" style="color:var(--muted);font-size:12px;font-weight:700;">At retirement (age ${state.retireAge})</td>
+    ${footerCell('Taxable',     retTax,  'var(--taxable-color)')}
+    ${footerCell('Traditional', retTrad, 'var(--trad-color)')}
+    ${footerCell('Roth',        retRoth, 'var(--roth-color)')}
+    <td style="font-size:12px;color:var(--muted);">Total: ${fmtD(retTax + retTrad + retRoth)}</td>
   </tr>`;
 
   document.getElementById('location-rows').innerHTML = locRows + locFooter;
@@ -2033,7 +2045,7 @@ function cpUpdateField(id, field, raw) {
   if (!row) return;
   if      (field === 'value')    row.value    = parseFloat(String(raw).replace(/[^0-9.]/g,'')) || 0;
   else if (field === 'er')       row.er       = parseFloat(raw) || 0;
-  else if (field === 'acct')     row.acct     = raw;
+  else if (field === 'acct')     { row.acct = raw; cpRenderHoldings(); }
   else if (field === 'fundName') row.fundName = raw;
   else if (field === 'cat')      row.cat      = raw;
   cpRenderStats();
@@ -2083,10 +2095,10 @@ function cpActivate() {
     desc: `${customPort.holdings.length} holdings · blended ER ${stats.blendedER.toFixed(2)}%`,
   };
 
-  /* Update portfolio balances from actual holdings */
-  if (stats.taxable)     state.taxable     = stats.taxable;
-  if (stats.traditional) state.traditional = stats.traditional;
-  if (stats.roth)        state.roth        = stats.roth;
+  /* Update portfolio balances from actual holdings — always overwrite even if zero */
+  state.taxable     = stats.taxable;
+  state.traditional = stats.traditional;
+  state.roth        = stats.roth;
 
   cpRefreshEngineBtn();
   setReturnEngine('custom');
