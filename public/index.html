@@ -191,6 +191,23 @@ body {
 .tax-row-hl { background: rgba(91,141,238,0.18) !important; }
 .tax-row-fade { background: transparent !important; transition: background 1.6s ease; }
 
+.io-bar { display:flex; align-items:center; gap:6px; margin-left:auto; flex-wrap:wrap; }
+.io-btn { padding:5px 14px; border-radius:5px; border:1px solid var(--border); background:var(--surface2); color:var(--accent3); font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:all 0.2s; white-space:nowrap; }
+.io-btn:hover { border-color:var(--accent3); background:var(--surface); }
+#import-status { font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; }
+
+.about-hero { background:linear-gradient(135deg,#0f172a,#1a1040); border:1px solid rgba(200,169,110,0.15); border-radius:10px; padding:28px 32px; margin-bottom:28px; }
+.about-hero h2 { font-family:'Playfair Display',serif; font-size:22px; color:var(--accent); margin-bottom:8px; }
+.about-hero p { font-size:14px; color:var(--muted); line-height:1.8; max-width:720px; }
+.book-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px 20px; }
+.book-card .book-title { font-size:13px; font-weight:600; color:var(--text); margin-bottom:4px; }
+.book-card .book-author { font-size:11px; color:var(--accent); font-family:'DM Mono',monospace; margin-bottom:6px; }
+.book-card .book-take { font-size:12px; color:var(--muted); line-height:1.6; }
+.cap-table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+.cap-table th { text-align:left; padding:10px 14px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.07em; font-family:'DM Mono',monospace; border-bottom:1px solid var(--border); }
+.cap-table td { padding:10px 14px; font-size:13px; border-bottom:1px solid var(--border); vertical-align:top; }
+.cap-table tr:hover td { background:var(--surface); }
+
 .burn-input {
   width: 86px;
   background: var(--surface2);
@@ -214,6 +231,11 @@ body {
 <div class="header">
   <h1>Worldwide Value Portfolio — Retirement Alpha Dashboard</h1>
   <span class="sub">Factor investing · Tax-location alpha · Bengen SAFEMAX · NQDC modeling · WA resident · 2025 brackets</span>
+  <div class="io-bar">
+    <button class="io-btn" onclick="exportData()">↓ Export JSON</button>
+    <label class="io-btn" style="cursor:pointer;">↑ Import JSON<input type="file" accept=".json" style="display:none" onchange="importData(this.files[0]);this.value=''"></label>
+    <span id="import-status"></span>
+  </div>
 </div>
 
 <div class="container">
@@ -411,6 +433,84 @@ body {
     </div>
   </div>
 
+  <!-- ═══ ABOUT ═══ -->
+  <div id="tab-about" class="tab-panel">
+    <div class="about-hero">
+      <h2>A Navigation Map for Retirement</h2>
+      <p>This tool is designed to help you reason clearly about the path from today's portfolio to a sustainable retirement. It draws from the best research in factor investing, tax strategy, and withdrawal science — distilled into an interactive planner you can explore without a financial advisor in the room. Think of it as a flight simulator: you adjust the dials, see the tradeoffs, and arrive at your own informed conviction.</p>
+    </div>
+
+    <div class="subsection">
+      <div class="section-title">What this tool does</div>
+      <table class="cap-table">
+        <thead><tr><th>Tab</th><th>What it answers</th><th>Key insight</th></tr></thead>
+        <tbody>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Overview</td><td>Where do I stand today, and what will I have at retirement?</td><td>Compound growth across all accounts — taxable, traditional, and Roth — projected to your target age.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Location Alpha</td><td>Am I holding the right funds in the right accounts?</td><td>Tax-location arbitrage: holding bonds in tax-deferred and equities in Roth can add 0.5–1.5%/yr after-tax with zero change in risk.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Tax Alpha</td><td>How does my asset location translate to after-tax dollars over time?</td><td>A timeline of annual tax drag vs. optimized location, showing cumulative dollars saved over your accumulation window.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Estate Alpha</td><td>What is the step-up-in-basis benefit in taxable at death?</td><td>Unrealized gains in taxable accounts vanish at death — a powerful estate tool for appreciated index holdings.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Tax Calc</td><td>What will my actual federal tax bill look like in retirement?</td><td>Real 2025 brackets, qualified dividend rates, and NIIT — not flat-rate estimates. Models NQDC, Traditional withdrawals, and dividends together.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Burn Stages</td><td>How much do I actually spend, by life stage?</td><td>Retirement spending follows a smile curve. Healthcare rises as activity falls. Model three distinct decades with per-category granularity.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Retirement</td><td>Does my money last? At what rate can I withdraw safely?</td><td>Bengen's SAFEMAX (4–4.5% rule) adjusted for your CAPE ratio, inflation regime, and return engine — with per-year account-by-account withdrawal modeling.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="subsection">
+      <div class="section-title">Intellectual foundations</div>
+      <p style="font-size:13px; color:var(--muted); margin-bottom:20px;">This tool is built on decades of research by people who put evidence above narrative. The books below shaped every model in this dashboard.</p>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px;">
+        <div class="book-card">
+          <div class="book-title">We're Talking Millions!</div>
+          <div class="book-author">Paul Merriman &amp; Richard Buck</div>
+          <div class="book-take">The return engine powering the Merriman mode here. Small-cap value is the dominant factor premium — a simple tilt that compounded over decades adds millions with no extra complexity.</div>
+        </div>
+        <div class="book-card">
+          <div class="book-title">The Little Book of Common Sense Investing</div>
+          <div class="book-author">John C. Bogle</div>
+          <div class="book-take">The foundational case for low-cost indexing. Every expense ratio in the fund table reflects this principle — a basis point saved compounds as powerfully as a basis point earned.</div>
+        </div>
+        <div class="book-card">
+          <div class="book-title">The Four Pillars of Investing</div>
+          <div class="book-author">William Bernstein</div>
+          <div class="book-take">Theory, history, psychology, and business of investing woven together. The asset allocation logic and rebalancing discipline in this tool traces to Bernstein's framework.</div>
+        </div>
+        <div class="book-card">
+          <div class="book-title">Your Money or Your Life</div>
+          <div class="book-author">Vicki Robin &amp; Joe Dominguez</div>
+          <div class="book-take">The burn-stage model asks the real question: what is enough? This book reframes spending not as deprivation but as trading life energy — the philosophical root of the Burn Stages tab.</div>
+        </div>
+        <div class="book-card">
+          <div class="book-title">Die with Zero</div>
+          <div class="book-author">Bill Perkins</div>
+          <div class="book-take">The counterpoint to over-accumulation. The retirement smile and stage-based spending model reflect Perkins' argument that experiences have time-value — spend in your active years, not just your final ones.</div>
+        </div>
+        <div class="book-card">
+          <div class="book-title">The Intelligent Investor</div>
+          <div class="book-author">Benjamin Graham</div>
+          <div class="book-take">Margin of safety applied to retirement: the SAFEMAX model, CAPE-adjusted withdrawal rates, and the conservative inflation assumptions are all Graham's temperament applied to drawdown.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div class="section-title">Framework &amp; assumptions</div>
+      <table class="cap-table">
+        <thead><tr><th>Assumption</th><th>Value</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>Factor portfolio CAGR</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">7.8% nominal</td><td>Avantis/DFA SCV historically ~2% above market; blended with private credit anchor</td></tr>
+          <tr><td>S&amp;P 500 blend CAGR</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">8.2% nominal</td><td>Vanguard long-run US equity projections, 60/40 blended with international</td></tr>
+          <tr><td>Merriman Worldwide CAGR</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">10.0% nominal</td><td>Paul Merriman's five-fund equal-weight global value, 1928–2023 backtest</td></tr>
+          <tr><td>Safe withdrawal rate</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">4.0–4.5% (CAPE-adjusted)</td><td>William Bengen's SAFEMAX, updated by Kitces CAPE analysis</td></tr>
+          <tr><td>Inflation</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">2.5% / 3.5% / 5%</td><td>Low / Moderate / High regime selection</td></tr>
+          <tr><td>Tax brackets</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">2025 federal, MFJ/Single</td><td>IRS Rev. Proc. 2024-40; no state income tax (WA)</td></tr>
+          <tr><td>NIIT threshold</td><td style="font-family:'DM Mono',monospace;color:var(--accent3);">$250K (MFJ) / $200K (Single)</td><td>IRC §1411, not inflation-adjusted</td></tr>
+        </tbody>
+      </table>
+      <p style="font-size:12px; color:var(--muted); margin-top:8px;">This tool is for educational and planning purposes. It does not constitute financial, tax, or legal advice. Past returns do not guarantee future results.</p>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -420,7 +520,7 @@ body {
 const tabDefs = [
   ['overview','Overview'],['location','Location Alpha'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['burn','Burn Stages'],
-  ['retirement','Retirement'],['dcp','DCP Model'],['v2diff','V2 vs V1']
+  ['retirement','Retirement'],['v2diff','V2 vs V1'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -1483,6 +1583,110 @@ function updateDCP(){
   });
   dt+=`</tbody>`;
   document.getElementById('dcp-table').innerHTML=dt;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   EXPORT / IMPORT
+   ═══════════════════════════════════════════════════════════════════ */
+function exportData() {
+  const data = {
+    version: 1,
+    exported: new Date().toISOString(),
+    state: {
+      taxable: state.taxable,
+      traditional: state.traditional,
+      roth: state.roth,
+      dcp: state.dcp,
+      currentAge: state.currentAge,
+      retireAge: state.retireAge,
+      additions: state.additions.map(a => ({...a})),
+    },
+    engine: selectedEngine,
+    burn: burnState.cats.map(c => ({name:c.name, s1:c.s1, s2:c.s2, s3:c.s3})),
+    retirement: {
+      cape:    +document.getElementById('rCape').value,
+      regime:  document.getElementById('rRegime').value,
+      horizon: +document.getElementById('rHorizon').value,
+      legacy:  +document.getElementById('rLegacy').value,
+      tax:     +document.getElementById('rTax').value,
+    },
+    taxcalc: {
+      ord:    parseNum(document.getElementById('tcOrdNum').value),
+      trad:   parseNum(document.getElementById('tcTradNum').value),
+      div:    parseNum(document.getElementById('tcDivNum').value),
+      target: parseNum(document.getElementById('tcTargetNum').value),
+    },
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `retirement-plan-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  const st = document.getElementById('import-status');
+  if (st) { st.textContent = 'exported ✓'; setTimeout(()=>st.textContent='', 2500); }
+}
+
+function importData(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result);
+      if (d.state) {
+        ['taxable','traditional','roth','dcp','currentAge','retireAge'].forEach(k => {
+          if (d.state[k] != null) state[k] = d.state[k];
+        });
+        if (Array.isArray(d.state.additions)) state.additions = d.state.additions.map(a => ({...a}));
+        resizeAdditions();
+      }
+      if (d.engine) setReturnEngine(d.engine);
+      if (Array.isArray(d.burn)) {
+        d.burn.forEach((c,i) => {
+          if (burnState.cats[i]) {
+            if (c.s1 != null) burnState.cats[i].s1 = c.s1;
+            if (c.s2 != null) burnState.cats[i].s2 = c.s2;
+            if (c.s3 != null) burnState.cats[i].s3 = c.s3;
+          }
+        });
+      }
+      if (d.retirement) {
+        const r = d.retirement;
+        if (r.cape   != null) document.getElementById('rCape').value    = r.cape;
+        if (r.regime)         document.getElementById('rRegime').value   = r.regime;
+        if (r.horizon != null) document.getElementById('rHorizon').value = r.horizon;
+        if (r.legacy  != null) document.getElementById('rLegacy').value  = r.legacy;
+        if (r.tax     != null) document.getElementById('rTax').value     = r.tax;
+      }
+      const tcSet = (id, val) => {
+        const slider = document.getElementById(id);
+        const num    = document.getElementById(id+'Num');
+        if (slider && val > +slider.max) slider.max = val;
+        if (slider) slider.value = Math.min(val, +slider.max);
+        if (num) num.value = formatNum(val);
+      };
+      if (d.taxcalc) {
+        if (d.taxcalc.ord    != null) tcSet('tcOrd',    d.taxcalc.ord);
+        if (d.taxcalc.trad   != null) tcSet('tcTrad',   d.taxcalc.trad);
+        if (d.taxcalc.div    != null) tcSet('tcDiv',    d.taxcalc.div);
+        if (d.taxcalc.target != null) tcSet('tcTarget', d.taxcalc.target);
+      }
+      buildOverview();
+      buildLocation();
+      buildNQDC();
+      buildTaxAlphaTimeline();
+      buildBurn();
+      updateRetirement();
+      solveTax();
+      const st = document.getElementById('import-status');
+      if (st) { st.textContent = 'imported ✓'; setTimeout(()=>st.textContent='', 3000); }
+    } catch(err) {
+      const st = document.getElementById('import-status');
+      if (st) st.textContent = 'error: invalid file';
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
 }
 
 /* ═══ INIT ═══ */
