@@ -333,9 +333,11 @@ body {
         <button class="io-btn" onclick="cpAddRow()" style="font-size:12px;padding:7px 16px;">+ Add Holding</button>
       </div>
       <div id="cp-holdings-table" style="overflow-x:auto;margin-bottom:12px;"></div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:18px;line-height:1.6;">
-        Known tickers (VOO, VTI, AVUV, BND, SCHD…) auto-fill fund name, ER, and category. Account type drives tax-location logic in every tab. Dollar values become your portfolio balances when you activate.
+      <p style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
+        Known tickers (VOO, VTI, AVUV, BND, SCHD…) auto-fill fund name, ER, and category. Set the <strong>Account</strong> column for each ETF — this is your actual allocation. Dollar values drive all account balances across every tab.
       </p>
+      <!-- Account coverage summary — updated by cpRenderHoldings -->
+      <div id="cp-coverage" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
         <button class="cp-activate-btn" id="cp-activate-btn" onclick="cpActivate()">Activate This Portfolio →</button>
         <span id="cp-activate-status" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
@@ -595,6 +597,8 @@ function showTab(id) {
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
 }
 
+let lastModelEngine = 'factor';
+
 function setPortfolioMode(mode) {
   const modelSec  = document.getElementById('pmode-model-section');
   const customSec = document.getElementById('pmode-custom-section');
@@ -611,6 +615,8 @@ function setPortfolioMode(mode) {
     customSec.style.display = 'none';
     if (btnModel)  btnModel.classList.add('active');
     if (btnCustom) btnCustom.classList.remove('active');
+    /* Switching away from custom — restore the last model engine so fund rows are real */
+    if (selectedEngine === 'custom') setReturnEngine(lastModelEngine);
   }
 }
 
@@ -721,6 +727,7 @@ function engineNetRet() { return engineMeta[selectedEngine].ret; }
 
 function setReturnEngine(eng) {
   if (!fundSets[eng]) return;
+  if (eng !== 'custom') lastModelEngine = eng;
   selectedEngine = eng;
   funds = fundSets[eng];
   /* Sync retirement select */
@@ -779,21 +786,43 @@ const acctDefs = [
 ];
 
 function buildOverview() {
+  const isCustomActive = selectedEngine === 'custom' && fundSets['custom'].length > 0;
+
   /* --- Starting portfolio cards --- */
-  document.getElementById('portfolio-inputs').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:8px;">
-      ${acctDefs.map(a => `
+  const acctCards = isCustomActive
+    /* Custom mode: account values are derived from ETF holdings — read-only */
+    ? acctDefs.map(a => `
+        <div class="metric-card" style="border-color:${a.color}33;">
+          <div class="label" style="color:${a.color};display:flex;align-items:center;justify-content:space-between;">
+            ${a.label}
+            <span style="font-size:9px;background:${a.color}22;color:${a.color};padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;">from ETFs</span>
+          </div>
+          <div id="p-${a.key}" style="font-size:22px;font-weight:600;color:${a.color};margin-top:4px;">${fmtM(state[a.key])}</div>
+        </div>`).join('')
+    /* Model mode: user enters account balances directly */
+    : acctDefs.map(a => `
         <div class="metric-card">
           <div class="label" style="color:${a.color};">${a.label}</div>
           <input class="portfolio-val-input" id="p-${a.key}"
             value="${formatNum(state[a.key])}"
             onchange="updateStateVal('${a.key}',this.value)"
             onkeydown="if(event.key==='Enter')this.blur()">
-        </div>`).join('')}
+        </div>`).join('');
+
+  document.getElementById('portfolio-inputs').innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:8px;">
+      ${acctCards}
       <div class="metric-card">
         <div class="label">Total starting</div>
         <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(stateBase())}</div>
       </div>
+      ${isCustomActive ? `
+        <div class="metric-card" style="border-color:var(--accent)33;">
+          <div class="label">Active portfolio</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:3px;">${customPort.name||'My Portfolio'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${customPort.holdings.length} ETF${customPort.holdings.length!==1?'s':''} · ${(engineMeta['custom'].ret*100).toFixed(1)}% est. return</div>
+          <button onclick="setPortfolioMode('custom')" style="font-size:10px;padding:4px 10px;background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif;">Edit holdings →</button>
+        </div>` : ''}
     </div>
     <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
       <div class="metric-card" style="flex:0 0 160px;">
@@ -932,8 +961,11 @@ function refreshSummaryMetrics() {
 }
 
 function updateStateVal(key, val) {
+  /* In custom mode, account balances are derived from ETF holdings — block direct edits */
+  if (selectedEngine === 'custom' && (key === 'taxable' || key === 'traditional' || key === 'roth')) return;
   state[key] = parseNum(val);
-  document.getElementById('p-'+key).value = formatNum(state[key]);
+  const el = document.getElementById('p-'+key);
+  if (el && el.tagName === 'INPUT') el.value = formatNum(state[key]);
   if (key === 'retireAge' || key === 'currentAge') {
     resizeAdditions();
     buildAdditionsTable();
@@ -2008,6 +2040,27 @@ function cpRenderHoldings() {
       </tr></thead>
       <tbody>${tbody}</tbody>
     </table>`;
+
+  /* Account coverage pill summary */
+  const covEl = document.getElementById('cp-coverage');
+  if (covEl) {
+    const byAcct = {Taxable:[], Traditional:[], Roth:[]};
+    customPort.holdings.forEach(r => { if(r.ticker && r.value>0) (byAcct[r.acct]||[]).push(r); });
+    const pill = (acct, color) => {
+      const rows = byAcct[acct] || [];
+      const total = rows.reduce((s,r)=>s+(r.value||0),0);
+      const ok = rows.length > 0;
+      return `<div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:5px;border:1px solid ${ok?color:'var(--border)'};background:${ok?color+'15':'var(--surface2)'};">
+        <span style="font-size:11px;color:${ok?color:'var(--muted)'};">${ok?'✓':'○'}</span>
+        <span style="font-size:11px;font-weight:600;color:${ok?color:'var(--muted)'};">${acct}</span>
+        ${ok ? `<span style="font-size:11px;color:var(--muted);">${rows.length} ETF${rows.length!==1?'s':''} · ${fmtM(total)}</span>` : `<span style="font-size:11px;color:var(--muted);">no ETFs</span>`}
+      </div>`;
+    };
+    covEl.innerHTML =
+      pill('Taxable','var(--taxable-color)') +
+      pill('Traditional','var(--trad-color)') +
+      pill('Roth','var(--roth-color)');
+  }
 }
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
@@ -2074,16 +2127,34 @@ function cpRefreshEngineBtn() {
 }
 
 function cpActivate() {
-  if (customPort.holdings.length === 0) {
-    const st = document.getElementById('cp-activate-status');
-    if (st) { st.textContent = '⚠ Add at least one holding first'; setTimeout(()=>st.textContent='',3000); }
+  const statusEl = document.getElementById('cp-activate-status');
+  const setStatus = (msg, ms=4000) => { if(statusEl){statusEl.textContent=msg; if(ms) setTimeout(()=>statusEl.textContent='',ms);} };
+
+  if (customPort.holdings.length === 0) { setStatus('⚠ Add at least one holding first'); return; }
+
+  /* Validate: every holding must have a ticker */
+  const missingTicker = customPort.holdings.filter(h => !h.ticker || h.ticker.trim() === '' || h.ticker === '?');
+  if (missingTicker.length > 0) {
+    setStatus(`⚠ Every holding must have a ticker symbol (${missingTicker.length} missing)`);
     return;
   }
+
+  /* Validate: every holding must have a dollar value */
   const stats = cpComputeStats();
-  if (stats.total === 0) {
-    const st = document.getElementById('cp-activate-status');
-    if (st) { st.textContent = '⚠ Enter dollar values for your holdings'; setTimeout(()=>st.textContent='',3000); }
-    return;
+  if (stats.total === 0) { setStatus('⚠ Enter dollar values for your holdings'); return; }
+
+  /* Warn if additions go to accounts that have no ETF holdings */
+  const acctWithETFs = new Set(customPort.holdings.map(h => h.acct));
+  const acctKeys  = {Taxable:'taxable', Traditional:'traditional', Roth:'roth'};
+  const orphanAccts = ['Taxable','Traditional','Roth'].filter(acct => {
+    const k = acctKeys[acct];
+    const hasAdditions = state.additions.some(a => a[k] > 0);
+    return hasAdditions && !acctWithETFs.has(acct);
+  });
+  if (orphanAccts.length > 0) {
+    const names = orphanAccts.join(', ');
+    setStatus(`⚠ ${names} has annual additions but no ETF assigned. Add an ETF to that account or clear the additions.`, 8000);
+    /* Don't block — allow activation anyway, projections still work */
   }
 
   /* Build engine */
@@ -2092,22 +2163,25 @@ function cpActivate() {
   engineMeta['custom'] = {
     label: `${customPort.name||'My Portfolio'} (${(ret*100).toFixed(1)}%)`,
     ret,
-    desc: `${customPort.holdings.length} holdings · blended ER ${stats.blendedER.toFixed(2)}%`,
+    desc: `${customPort.holdings.length} ETF${customPort.holdings.length!==1?'s':''} · blended ER ${stats.blendedER.toFixed(2)}%`,
   };
 
-  /* Update portfolio balances from actual holdings — always overwrite even if zero */
+  /* Account balances are DERIVED from ETF holdings — single source of truth */
   state.taxable     = stats.taxable;
   state.traditional = stats.traditional;
   state.roth        = stats.roth;
 
   cpRefreshEngineBtn();
   setReturnEngine('custom');
-  buildOverview();
+  buildOverview();  /* re-renders locked account cards */
 
   const btn = document.getElementById('cp-activate-btn');
-  if (btn) { btn.textContent = '✓ Active — all tabs updated'; btn.classList.add('active'); setTimeout(()=>{ btn.textContent='Activate This Portfolio →'; btn.classList.remove('active'); },3500); }
-  const st = document.getElementById('cp-activate-status');
-  if (st) { st.textContent = `${customPort.holdings.length} holdings · ${fmtM(stats.total)} total`; }
+  if (btn) {
+    btn.textContent = '✓ Active — all tabs updated';
+    btn.classList.add('active');
+    setTimeout(() => { btn.textContent = 'Activate This Portfolio →'; btn.classList.remove('active'); }, 3500);
+  }
+  if (!orphanAccts.length) setStatus(`${customPort.holdings.length} ETFs · ${fmtM(stats.total)} total · Taxable ${fmtM(stats.taxable)} · Traditional ${fmtM(stats.traditional)} · Roth ${fmtM(stats.roth)}`, 0);
 }
 
 function buildCustomPortfolio() {
