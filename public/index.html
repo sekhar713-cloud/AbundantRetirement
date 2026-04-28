@@ -461,6 +461,49 @@ body {
         <div class="input-group"><label>Return engine</label><select class="v3-input v3-select" id="rEngine" onchange="setReturnEngine(this.value)"><option value="factor" selected>Factor Portfolio (7.8%)</option><option value="sp500">S&amp;P Blend (8.2%)</option><option value="merriman">Merriman Worldwide All Value (10%)</option></select></div>
       </div>
     </div>
+    <!-- ── Income Sources ── -->
+    <div class="subsection">
+      <div class="section-title">Income sources in retirement</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+        Guaranteed income (Social Security, pension) reduces how much your portfolio needs to provide. Enter $0 if not applicable.
+      </p>
+      <div class="v3-grid2" style="margin-bottom:0;">
+        <div class="alpha-card">
+          <div style="font-size:12px;font-weight:600;color:var(--accent3);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Social Security</div>
+          <div class="input-group">
+            <label>Your SSA monthly benefit at FRA (age 67) <a href="https://www.ssa.gov/myaccount/" target="_blank" style="color:var(--accent2);font-size:10px;margin-left:4px;">→ ssa.gov/myaccount</a></label>
+            <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span><input type="number" class="v3-input" id="ssBenefit" value="0" min="0" max="10000" step="100" oninput="incomeState.ssBenefit=+this.value;updateRetirement();" style="width:110px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Claim at age</label>
+            <select class="v3-input v3-select" id="ssClaimAge" onchange="incomeState.ssClaimAge=+this.value;updateRetirement();">
+              <option value="62">62 — early (reduced benefit)</option>
+              <option value="63">63</option><option value="64">64</option><option value="65">65</option><option value="66">66</option>
+              <option value="67" selected>67 — Full Retirement Age (FRA)</option>
+              <option value="68">68</option><option value="69">69</option>
+              <option value="70">70 — maximum benefit (+24%)</option>
+            </select>
+          </div>
+          <div id="ss-comparison" style="margin-top:10px;"></div>
+        </div>
+        <div class="alpha-card">
+          <div style="font-size:12px;font-weight:600;color:var(--trad-color);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Pension &amp; Other Income</div>
+          <div class="input-group">
+            <label>Monthly pension / annuity (starts at retirement)</label>
+            <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span><input type="number" class="v3-input" id="pensionMonthly" value="0" min="0" step="100" oninput="incomeState.pensionMonthly=+this.value;updateRetirement();" style="width:110px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Annual other income (rental, part-time, consulting)</label>
+            <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span><input type="number" class="v3-input" id="otherAnnual" value="0" min="0" step="1000" oninput="incomeState.otherAnnual=+this.value;updateRetirement();" style="width:110px;"></div>
+          </div>
+          <div class="input-group" style="margin-bottom:0;">
+            <label>Other income ends at age</label>
+            <input type="number" class="v3-input" id="otherEndAge" value="75" min="60" max="100" oninput="incomeState.otherEndAge=+this.value;updateRetirement();" style="width:80px;">
+          </div>
+          <div id="income-floor-summary" style="margin-top:14px;padding:10px;background:var(--surface2);border-radius:6px;"></div>
+        </div>
+      </div>
+    </div>
     <div class="subsection">
       <div class="section-title">CAPE lookup — Bengen two-factor model</div>
       <table class="fund-table" id="cape-table"></table>
@@ -1447,6 +1490,93 @@ const burnState = {cats: [
   {name:'Travel',                     s1:3000, s2:2500,  s3:1500},
 ]};
 
+/* ── Income sources state ──────────────────────────────────────── */
+const incomeState = {
+  ssBenefit:      0,     // monthly SS benefit at FRA (age 67) — from SSA statement
+  ssClaimAge:     67,    // when to start claiming: 62–70
+  pensionMonthly: 0,     // monthly pension/annuity starting at retirement
+  otherAnnual:    0,     // annual other income (rental, part-time)
+  otherEndAge:    75,    // age other income stops
+};
+
+function ssAdjusted(claimAge) {
+  if (!incomeState.ssBenefit) return 0;
+  const fra = 67, age = Math.max(62, Math.min(70, +claimAge));
+  if (age < fra) {
+    const mo = (fra - age) * 12;
+    return incomeState.ssBenefit * (1 - Math.min(36,mo)*(5/9/100) - Math.max(0,mo-36)*(5/12/100));
+  }
+  return incomeState.ssBenefit * (1 + (age - fra) * 0.08);
+}
+
+function extIncome(age) {
+  let inc = 0;
+  if (incomeState.ssBenefit && age >= incomeState.ssClaimAge)
+    inc += ssAdjusted(incomeState.ssClaimAge) * 12;
+  if (incomeState.pensionMonthly) inc += incomeState.pensionMonthly * 12;
+  if (incomeState.otherAnnual && age <= (incomeState.otherEndAge||999)) inc += incomeState.otherAnnual;
+  return inc;
+}
+
+function taxableSSFraction(combinedIncome) {
+  const thr1 = tcFiling==='mfj' ? 32000 : 25000;
+  const thr2 = tcFiling==='mfj' ? 44000 : 34000;
+  if (combinedIncome <= thr1) return 0;
+  if (combinedIncome <= thr2) return 0.50;
+  return 0.85;
+}
+
+function buildSsComparison() {
+  const el = document.getElementById('ss-comparison');
+  if (!el || !incomeState.ssBenefit) { if(el) el.innerHTML=''; return; }
+  const ages   = [62, 67, 70];
+  const labels = ['Early (62)','FRA (67)','Max (70)'];
+  const colors = ['var(--danger)','var(--accent)','var(--accent3)'];
+  const mFRA = ssAdjusted(67) * 12;
+  const breakEven = (claimAge) => {
+    if (claimAge >= 67) return null;
+    const mEarly = ssAdjusted(claimAge) * 12;
+    const annualDiff = mFRA - mEarly;
+    if (annualDiff <= 0) return null;
+    const yearsCumEarly = (67 - claimAge) * mEarly;
+    return Math.ceil(67 + yearsCumEarly / annualDiff);
+  };
+  el.innerHTML = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:4px;">` +
+    ages.map((a,i) => {
+      const mo = ssAdjusted(a);
+      const ann = mo * 12;
+      const be  = a < 67 ? breakEven(a) : null;
+      const sel = incomeState.ssClaimAge == a;
+      return `<div style="padding:8px;border-radius:5px;border:1px solid ${sel?colors[i]:'var(--border)'};background:${sel?colors[i]+'15':'var(--surface2)'};">
+        <div style="font-size:9px;color:${colors[i]};font-family:'DM Mono',monospace;text-transform:uppercase;font-weight:600;">${labels[i]}</div>
+        <div style="font-size:15px;font-weight:700;color:${colors[i]};margin:3px 0;">${fmtD(mo)}<span style="font-size:9px;font-weight:400;color:var(--muted);">/mo</span></div>
+        <div style="font-size:10px;color:var(--muted);">${fmtD(ann)}/yr</div>
+        ${be ? `<div style="font-size:9px;color:var(--muted);margin-top:3px;">FRA better after age ${be}</div>` : ''}
+      </div>`;
+    }).join('') + `</div>`;
+}
+
+function buildIncomeFloorSummary() {
+  const el = document.getElementById('income-floor-summary');
+  if (!el) return;
+  const ssAnn     = ssAdjusted(incomeState.ssClaimAge) * 12;
+  const penAnn    = (incomeState.pensionMonthly||0) * 12;
+  const otherAnn  = incomeState.otherAnnual||0;
+  const total     = ssAnn + penAnn + otherAnn;
+  if (total === 0) { el.innerHTML=`<div style="font-size:11px;color:var(--muted);">Add income sources above to see your guaranteed income floor.</div>`; return; }
+  const s1Ann = burnState.cats.reduce((s,c)=>s+c.s1*12,0);
+  const coverPct = s1Ann > 0 ? Math.min(100, total/s1Ann*100) : 0;
+  el.innerHTML = `
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:8px;">Annual income floor at retirement</div>
+    ${ssAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--accent3);">Social Security</span><span style="font-family:'DM Mono',monospace;color:var(--accent3);">${fmtD(ssAnn)}/yr</span></div>`:''}
+    ${penAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--trad-color);">Pension</span><span style="font-family:'DM Mono',monospace;color:var(--trad-color);">${fmtD(penAnn)}/yr</span></div>`:''}
+    ${otherAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--muted);">Other</span><span style="font-family:'DM Mono',monospace;">${fmtD(otherAnn)}/yr</span></div>`:''}
+    <div style="border-top:1px solid var(--border);margin-top:5px;padding-top:5px;display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
+      <span>Total floor</span><span style="font-family:'DM Mono',monospace;color:var(--accent);">${fmtD(total)}/yr</span>
+    </div>
+    ${s1Ann>0?`<div style="font-size:11px;color:var(--muted);margin-top:6px;">Covers ${coverPct.toFixed(0)}% of your Stage 1 burn target (${fmtD(s1Ann)}/yr)</div>`:''}`;
+}
+
 function burnUpdate(i, key, val) {
   burnState.cats[i][key] = Math.max(0, +val || 0);
   buildBurn();
@@ -1587,8 +1717,14 @@ function updateRetirement(){
     /* 1. Qualified dividends — 2% of taxable balance, mandatory, LTCG-taxed */
     const divIncome = balTax * 0.02;
 
-    /* Remaining spend target after mandatory dividends */
-    let need = Math.max(0, wd - divIncome);
+    /* External (guaranteed) income: SS + pension + other */
+    const ssAnnual  = (incomeState.ssBenefit && age >= incomeState.ssClaimAge) ? ssAdjusted(incomeState.ssClaimAge)*12 : 0;
+    const penAnnual = incomeState.pensionMonthly ? incomeState.pensionMonthly*12 : 0;
+    const othAnnual = (incomeState.otherAnnual && age <= (incomeState.otherEndAge||999)) ? incomeState.otherAnnual : 0;
+    const extInc    = ssAnnual + penAnnual + othAnnual;
+
+    /* Remaining spend target after mandatory dividends and external income */
+    let need = Math.max(0, wd - divIncome - extInc);
 
     /* 3. Taxable cap gains withdrawal (base — may grow below if deficit) */
     let taxDraw = Math.min(need, Math.max(0, balTax));
@@ -1614,17 +1750,22 @@ function updateRetirement(){
 
     /* ── Exact tax using same bracket functions as Tax Calc tab ──────
        ordIncome  (Traditional) = ordinary income brackets
-       ltcgIncome (ETF dividends + cap gains) = qualified / LTCG rate  */
+       ltcgIncome (ETF dividends + cap gains) = qualified / LTCG rate
+       SS income: up to 85% taxable as ordinary income (IRS provisional rules) */
     const ordIncome  = tradDraw;
     let ltcgIncome   = divIncome + taxDraw;
-    const retTaxOrd  = Math.max(0, ordIncome - stdDed[tcFiling]);
-    const oTax       = ordTax(retTaxOrd);
-    let cgTax        = cgTaxCalc(retTaxOrd, ltcgIncome);
-    let nTax         = niit(ordIncome + ltcgIncome, ltcgIncome);
-    let taxPaid      = oTax + cgTax + nTax;
-    let afterTax     = ordIncome + ltcgIncome + rothDraw - taxPaid;
-    let totalIncome  = ordIncome + ltcgIncome + rothDraw;
-    let totalDraw    = taxDraw + tradDraw + rothDraw;
+    const provIncome  = ordIncome + ltcgIncome + rothDraw + ssAnnual * 0.5;
+    const ssTaxFrac   = taxableSSFraction(provIncome);
+    const taxableSS   = ssAnnual * ssTaxFrac;
+    const ordIncTotal = ordIncome + taxableSS;
+    const retTaxOrd   = Math.max(0, ordIncTotal - stdDed[tcFiling]);
+    const oTax        = ordTax(retTaxOrd);
+    let cgTax         = cgTaxCalc(retTaxOrd, ltcgIncome);
+    let nTax          = niit(ordIncTotal + ltcgIncome, ltcgIncome);
+    let taxPaid       = oTax + cgTax + nTax;
+    let afterTax      = ordIncome + ltcgIncome + rothDraw - taxPaid + extInc;
+    let totalIncome   = ordIncome + ltcgIncome + rothDraw + extInc;
+    let totalDraw     = taxDraw + tradDraw + rothDraw;
 
     /* ── Burn need for this year (inflation resets at each stage start) */
     const yr0       = y - 1;  // 0-based year index
@@ -1642,8 +1783,8 @@ function updateRetirement(){
         const mid = (lo + hi) / 2;
         const tryLTCG = ltcgIncome + mid;
         const tryCG   = cgTaxCalc(retTaxOrd, tryLTCG);
-        const tryN    = niit(ordIncome + tryLTCG, tryLTCG);
-        const tryAt   = ordIncome + tryLTCG + rothDraw - oTax - tryCG - tryN;
+        const tryN    = niit(ordIncTotal + tryLTCG, tryLTCG);
+        const tryAt   = ordIncome + tryLTCG + rothDraw - oTax - tryCG - tryN + extInc;
         if (tryAt < burnNeed) lo = mid; else hi = mid;
       }
       extraEquity = Math.min(Math.ceil((lo + hi) / 2), balTax);
@@ -1652,10 +1793,10 @@ function updateRetirement(){
         taxDraw   += extraEquity;
         ltcgIncome += extraEquity;
         cgTax      = cgTaxCalc(retTaxOrd, ltcgIncome);
-        nTax       = niit(ordIncome + ltcgIncome, ltcgIncome);
+        nTax       = niit(ordIncTotal + ltcgIncome, ltcgIncome);
         taxPaid    = oTax + cgTax + nTax;
-        afterTax   = ordIncome + ltcgIncome + rothDraw - taxPaid;
-        totalIncome = ordIncome + ltcgIncome + rothDraw;
+        afterTax   = ordIncome + ltcgIncome + rothDraw - taxPaid + extInc;
+        totalIncome = ordIncome + ltcgIncome + rothDraw + extInc;
         totalDraw   = taxDraw + tradDraw + rothDraw;
       }
     }
@@ -1671,7 +1812,7 @@ function updateRetirement(){
 
     rows.push({year:y, age, start:totalStart, divIncome, taxDraw, tradDraw, rothDraw,
                totalDraw, totalIncome, afterTax, taxPaid, burnNeed, surplus, extraEquity,
-               end:totalEnd, cwr, tradLocked, isRMD});
+               end:totalEnd, cwr, tradLocked, isRMD, ssAnnual, penAnnual, othAnnual, extInc, ssTaxFrac});
     if (totalIncome > maxW) maxW = totalIncome;
     wd *= (1 + infRate);
   }
@@ -1680,15 +1821,16 @@ function updateRetirement(){
   if (rows.length > 0) {
     const r0 = rows[0];
     document.getElementById('safemax-sub').textContent =
-      `SAFEMAX ${sm.toFixed(1)}% · Retire age ${state.retireAge} · Balance at retirement: ${fmtM(retirePortfolio)} · Yr-1 draw: ${fmtD(r0.totalIncome)} · After-tax: ${fmtD(r0.afterTax)} · Monthly: ${fmtD(r0.afterTax/12)}`;
+      `SAFEMAX ${sm.toFixed(1)}% · Portfolio at retirement: ${fmtM(retirePortfolio)} · Yr-1 total income: ${fmtD(r0.totalIncome)} (${fmtD(r0.extInc)} guaranteed) · After-tax: ${fmtD(r0.afterTax)} · Monthly: ${fmtD(r0.afterTax/12)}`;
   }
 
   /* Stacked bar */
   document.getElementById('retirement-bars').innerHTML = `
     <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:6px;">
-      Withdrawals from age ${state.retireAge} — Dividends → Cap Gains (LTCG) → Traditional (60+) → Roth
+      Withdrawals from age ${state.retireAge} — Guaranteed Income → Dividends → Cap Gains (LTCG) → Traditional (60+) → Roth
     </div>
     <div class="legend" style="margin-bottom:6px;">
+      <span class="legend-item"><span class="legend-dot" style="background:#2ecc71;"></span>SS / Pension / Other</span>
       <span class="legend-item"><span class="legend-dot" style="background:var(--accent3);"></span>Dividends (2% taxable)</span>
       <span class="legend-item"><span class="legend-dot" style="background:var(--taxable-color);"></span>Cap Gains (LTCG)</span>
       <span class="legend-item"><span class="legend-dot" style="background:var(--trad-color);"></span>Traditional (age 60+)</span>
@@ -1698,11 +1840,13 @@ function updateRetirement(){
       ${rows.map(r => {
         const h = maxW > 0 ? r.totalIncome / maxW * 100 : 0;
         const tot = r.totalIncome || 1;
+        const gp = (r.extInc||0)  / tot * 100;
         const dv = r.divIncome / tot * 100;
         const tp = r.taxDraw   / tot * 100;
         const rp = r.tradDraw  / tot * 100;
         const op = r.rothDraw  / tot * 100;
         return `<div style="flex:1;height:${h}%;display:flex;flex-direction:column-reverse;border-radius:1px 1px 0 0;overflow:hidden;min-height:${r.totalIncome>0?'1px':'0'};">
+          <div style="height:${gp}%;background:#2ecc71;"></div>
           <div style="height:${dv}%;background:var(--accent3);"></div>
           <div style="height:${tp}%;background:var(--taxable-color);"></div>
           <div style="height:${rp}%;background:var(--trad-color);"></div>
@@ -1718,6 +1862,7 @@ function updateRetirement(){
     <th style="color:var(--taxable-color);">Cap Gains<br><small style="font-weight:400;font-size:10px;">LTCG rate</small></th>
     <th style="color:var(--trad-color);">Traditional<br><small style="font-weight:400;font-size:10px;">60+ voluntary · 73+ RMD</small></th>
     <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;font-size:10px;">last resort</small></th>
+    <th style="color:#2ecc71;">Guaranteed<br><small style="font-weight:400;font-size:10px;">SS + Pension</small></th>
     <th>Total Income</th>
     <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → Tax Calc</small></th>
     <th>After-Tax</th>
@@ -1735,6 +1880,7 @@ function updateRetirement(){
       <td style="color:var(--taxable-color);font-family:'DM Mono',monospace;">${r.taxDraw>0?fmtD(r.taxDraw):'—'}</td>
       <td style="color:${r.tradLocked?'var(--muted)':'var(--trad-color)'};font-family:'DM Mono',monospace;">${r.tradLocked?'🔒 &lt;60':r.tradDraw>0?fmtD(r.tradDraw)+(r.isRMD?' <span style="font-size:10px;color:var(--accent);">RMD</span>':''):'—'}</td>
       <td style="color:var(--roth-color);font-family:'DM Mono',monospace;">${r.rothDraw>0?fmtD(r.rothDraw):'—'}</td>
+      <td style="color:#2ecc71;font-family:'DM Mono',monospace;">${r.extInc>0?fmtD(r.extInc):'—'}</td>
       <td style="font-weight:600;font-family:'DM Mono',monospace;">${fmtD(r.totalIncome)}</td>
       <td class="tax-link" onclick="jumpToTaxCalc(${Math.round(r.tradDraw)},${Math.round(r.divIncome)},${Math.round(r.afterTax)})" style="color:var(--danger);font-family:'DM Mono',monospace;" title="Click to open Tax Calc with this year's income breakdown">${fmtD(r.taxPaid)}</td>
       <td style="color:var(--accent2);font-family:'DM Mono',monospace;">${fmtD(r.afterTax)}</td>
@@ -1746,6 +1892,8 @@ function updateRetirement(){
   });
   rt += `</tbody>`;
   document.getElementById('retirement-table').innerHTML = rt;
+  buildSsComparison();
+  buildIncomeFloorSummary();
   if (typeof buildNetWorth === 'function') buildNetWorth();
 }
 
@@ -1766,6 +1914,7 @@ function exportData() {
     },
     engine: selectedEngine,
     burn: burnState.cats.map(c => ({name:c.name, s1:c.s1, s2:c.s2, s3:c.s3})),
+    income: { ...incomeState },
     retirement: {
       cape:    +document.getElementById('rCape').value,
       regime:  document.getElementById('rRegime').value,
@@ -1811,6 +1960,14 @@ function importData(file) {
             if (c.s2 != null) burnState.cats[i].s2 = c.s2;
             if (c.s3 != null) burnState.cats[i].s3 = c.s3;
           }
+        });
+      }
+      if (d.income) {
+        ['ssBenefit','ssClaimAge','pensionMonthly','otherAnnual','otherEndAge'].forEach(k => {
+          if (d.income[k] != null) incomeState[k] = d.income[k];
+        });
+        ['ssBenefit','ssClaimAge','pensionMonthly','otherAnnual','otherEndAge'].forEach(k => {
+          const el = document.getElementById(k); if(el) el.value = incomeState[k];
         });
       }
       if (d.retirement) {
@@ -2229,8 +2386,9 @@ function buildNetWorth() {
   const retire = [];
   for (let y = 1; y <= horizon; y++) {
     const age = state.retireAge + y - 1;
+    const extIncNW  = extIncome(age);
     const divIncome = bTax * DIV_YIELD;
-    let needLeft = Math.max(0, wd - divIncome);
+    let needLeft = Math.max(0, wd - divIncome - extIncNW);
     const addTax  = Math.min(needLeft, Math.max(0, bTax));
     bTax = Math.max(0, bTax - addTax); needLeft -= addTax;
     let addTrad = 0;
