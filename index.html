@@ -228,7 +228,7 @@ body {
     </div>
 
     <div class="subsection">
-      <div class="section-title">Annual funding — next 4 years</div>
+      <div class="section-title" id="additions-title">Annual funding</div>
       <div id="additions-section"></div>
     </div>
 
@@ -474,12 +474,22 @@ const state = {
     {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
     {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
     {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
-    {taxable:2200000, traditional:80000, roth:50000, dcp:500000},
   ],
 };
 
 function stateBase()     { return state.taxable + state.traditional + state.roth + state.dcp; }
 function stateTotalAdd() { return state.additions.reduce((s,a) => s+a.taxable+a.traditional+a.roth+a.dcp, 0); }
+
+function resizeAdditions() {
+  const target = Math.min(Math.max(0, state.retireAge - state.currentAge), 10);
+  while (state.additions.length < target) {
+    const last = state.additions.length > 0
+      ? {...state.additions[state.additions.length - 1]}
+      : {taxable:0, traditional:0, roth:0, dcp:0};
+    state.additions.push(last);
+  }
+  state.additions.length = target;
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    V1 STATIC DATA
@@ -669,6 +679,9 @@ function buildFundRows() {
 }
 
 function buildAdditionsTable() {
+  const nYr = state.additions.length;
+  const titleEl = document.getElementById('additions-title');
+  if (titleEl) titleEl.textContent = `Annual funding — next ${nYr} year${nYr !== 1 ? 's' : ''} (accumulation window)`;
   const gt = {taxable:0,traditional:0,roth:0,dcp:0};
   state.additions.forEach(a=>{gt.taxable+=a.taxable;gt.traditional+=a.traditional;gt.roth+=a.roth;gt.dcp+=a.dcp;});
   const gtTotal = gt.taxable+gt.traditional+gt.roth+gt.dcp;
@@ -709,10 +722,23 @@ function buildAdditionsTable() {
 
 function refreshSummaryMetrics() {
   const base = stateBase(), add = stateTotalAdd();
+  const nr = engineNetRet();
+  const accumYr = Math.max(0, state.retireAge - state.currentAge);
+  let pTax = state.taxable, pTrad = state.traditional, pRoth = state.roth, pDCP = state.dcp;
+  for (let y = 0; y < accumYr; y++) {
+    if (y < state.additions.length) {
+      const a = state.additions[y];
+      pTax += a.taxable; pTrad += a.traditional; pRoth += a.roth; pDCP += a.dcp;
+    }
+    pTax *= (1+nr); pTrad *= (1+nr); pRoth *= (1+nr); pDCP *= (1+nr);
+  }
+  const projRetire = pTax + pTrad + pRoth + pDCP;
+  const nYr = state.additions.length;
+
   document.getElementById('overview-metrics').innerHTML = `
-    <div class="metric-card"><div class="label">Total portfolio</div><div class="value accent" id="m-base">${fmtM(base)}</div></div>
-    <div class="metric-card"><div class="label">4-yr additions</div><div class="value accent2" id="m-add">${fmtM(add)}</div></div>
-    <div class="metric-card"><div class="label">Total capital</div><div class="value" id="m-total">${fmtM(base+add)}</div><div class="sub">30-year horizon</div></div>
+    <div class="metric-card"><div class="label">Current portfolio</div><div class="value accent" id="m-base">${fmtM(base)}</div></div>
+    <div class="metric-card"><div class="label">${nYr}-yr planned additions</div><div class="value accent2" id="m-add">${fmtM(add)}</div><div class="sub">contributions only</div></div>
+    <div class="metric-card" style="border-color:var(--accent3)33;"><div class="label">Projected at retirement · age ${state.retireAge}</div><div class="value accent3" style="font-size:22px;" id="m-retire">${fmtM(projRetire)}</div><div class="sub">${(nr*100).toFixed(1)}% CAGR · ${accumYr}-yr compound</div></div>
     <div class="metric-card"><div class="label">Funds</div><div class="value">${funds.length}</div><div class="sub">${engineMeta[selectedEngine].desc}</div></div>
     <div class="metric-card"><div class="label">Blended ER</div><div class="value">${blendedER().toFixed(2)}%</div></div>
     <div class="metric-card"><div class="label">Return engine</div><div class="value accent3" style="font-size:15px;">${(engineMeta[selectedEngine].ret*100).toFixed(1)}%</div><div class="sub">${engineMeta[selectedEngine].label}</div></div>`;
@@ -721,6 +747,10 @@ function refreshSummaryMetrics() {
 function updateStateVal(key, val) {
   state[key] = parseNum(val);
   document.getElementById('p-'+key).value = formatNum(state[key]);
+  if (key === 'retireAge' || key === 'currentAge') {
+    resizeAdditions();
+    buildAdditionsTable();
+  }
   onPortfolioChange();
 }
 
@@ -739,22 +769,19 @@ function updateAddition(yr, key, val) {
 
 function onPortfolioChange() {
   document.getElementById('p-total').textContent = fmtM(stateBase());
-  const base=stateBase(), add=stateTotalAdd();
-  const mb=document.getElementById('m-base'), ma=document.getElementById('m-add'), mt=document.getElementById('m-total');
-  if(mb) mb.textContent=fmtM(base);
-  if(ma) ma.textContent=fmtM(add);
-  if(mt) mt.textContent=fmtM(base+add);
   /* Age display */
   const ay=document.getElementById('p-accumYears');
   if(ay){ const yrs=state.retireAge-state.currentAge; ay.textContent=yrs+' yrs'; ay.nextElementSibling.textContent=`Ages ${state.currentAge}–${state.retireAge-1} · then SAFEMAX withdrawals`; }
   /* Sync DCP model tab deferral amount from portfolio state */
   const dcpEl=document.getElementById('dcpAmt');
   if(dcpEl){ dcpEl.value=state.dcp; updateDCP(); }
+  refreshSummaryMetrics();
   buildFundRows();
   buildLocation();
   updateRetirement();
   buildNQDC();
   buildTaxAlphaTimeline();
+  buildBurn();
 }
 
 /* ═══ LOCATION ═══ */
@@ -1107,10 +1134,11 @@ function burnUpdate(i, key, val) {
 }
 
 function buildBurn() {
+  const r = state.retireAge;
   const stages = [
-    {name:'Stage 1', ages:'50–60', key:'s1', color:'var(--accent3)'},
-    {name:'Stage 2', ages:'60–70', key:'s2', color:'var(--accent)'},
-    {name:'Stage 3', ages:'70+',   key:'s3', color:'var(--accent2)'},
+    {name:'Stage 1', ages:`${r}–${r+9}`,     key:'s1', color:'var(--accent3)'},
+    {name:'Stage 2', ages:`${r+10}–${r+19}`,  key:'s2', color:'var(--accent)'},
+    {name:'Stage 3', ages:`${r+20}+`,         key:'s3', color:'var(--accent2)'},
   ];
   const totals  = stages.map(s => burnState.cats.reduce((sum,c) => sum + c[s.key], 0));
   const annuals = totals.map(t => t * 12);
