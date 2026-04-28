@@ -224,6 +224,22 @@ body {
 .burn-input:focus { border-color: var(--accent); }
 .surplus-pos { color: var(--accent2); }
 .surplus-neg { color: var(--danger); }
+
+/* Custom portfolio builder */
+.cp-table { width:100%; border-collapse:collapse; }
+.cp-table th { text-align:left; padding:8px 10px; font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; font-family:'DM Mono',monospace; border-bottom:1px solid var(--border); white-space:nowrap; }
+.cp-table td { padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:middle; }
+.cp-input { background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:'DM Mono',monospace; font-size:12px; padding:5px 8px; outline:none; }
+.cp-input:focus { border-color:var(--accent); }
+.cp-input.cp-ticker { text-transform:uppercase; color:var(--accent); font-weight:600; }
+.cp-badge { font-size:9px; color:var(--accent3); font-family:'DM Mono',monospace; margin-left:4px; vertical-align:middle; }
+.cp-unknown { font-size:9px; color:var(--danger); font-family:'DM Mono',monospace; margin-left:4px; vertical-align:middle; }
+.cp-stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; }
+.cp-stat-item .cp-stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.07em; font-family:'DM Mono',monospace; margin-bottom:2px; }
+.cp-stat-item .cp-stat-val { font-family:'DM Mono',monospace; font-weight:600; font-size:14px; }
+.cp-activate-btn { display:inline-block; padding:10px 24px; border-radius:6px; border:1px solid var(--accent); background:transparent; color:var(--accent); font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; transition:all 0.2s; margin-top:4px; }
+.cp-activate-btn:hover { background:var(--surface2); }
+.cp-activate-btn.active { border-color:var(--accent3); color:var(--accent3); }
 </style>
 </head>
 <body>
@@ -384,6 +400,49 @@ body {
     </div>
   </div>
 
+  <!-- ═══ MY PORTFOLIO ═══ -->
+  <div id="tab-myportfolio" class="tab-panel">
+    <div class="section-title">My Portfolio</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">Enter your actual holdings below. Ticker symbols auto-fill fund name, ER, and category. When you activate, your balances and fund mix update across every tab.</p>
+
+    <div class="v3-grid2" style="margin-bottom:24px;">
+      <div class="alpha-card">
+        <div class="input-group">
+          <label>Portfolio name</label>
+          <input type="text" class="v3-input" id="cp-name" value="My Portfolio" maxlength="40"
+            oninput="customPort.name=this.value">
+        </div>
+        <div class="input-group" style="margin-bottom:0;">
+          <label>Expected annual return % <small style="color:var(--muted);text-transform:none;letter-spacing:0;">(leave blank to auto-estimate)</small></label>
+          <input type="number" class="v3-input" id="cp-ret-override" placeholder="auto"
+            min="1" max="25" step="0.1"
+            oninput="customPort.manualRet=this.value?+this.value/100:null; cpRenderStats()">
+        </div>
+      </div>
+      <div class="alpha-card" id="cp-stats" style="display:flex;flex-direction:column;justify-content:center;">
+        <div style="color:var(--muted);font-size:12px;font-family:'DM Mono',monospace;">Add holdings to see summary</div>
+      </div>
+    </div>
+
+    <div class="subsection">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+        <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:600;">Holdings</div>
+        <button class="io-btn" onclick="cpAddRow()" style="font-size:12px;padding:7px 16px;">+ Add Holding</button>
+      </div>
+      <div id="cp-holdings-table" style="overflow-x:auto;"></div>
+      <p style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">
+        Known tickers auto-fill fund name, ER, dividend yield, and category — all fields remain editable.
+        Account type determines tax location logic in every tab.
+        Dollar values override the Starting Portfolio balances in Overview when you activate.
+      </p>
+    </div>
+
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <button class="cp-activate-btn" id="cp-activate-btn" onclick="cpActivate()">Activate This Portfolio →</button>
+      <span id="cp-activate-status" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+    </div>
+  </div>
+
   <!-- ═══ ABOUT ═══ -->
   <div id="tab-about" class="tab-panel">
     <div class="about-hero">
@@ -471,7 +530,7 @@ body {
 const tabDefs = [
   ['overview','Overview'],['burn','Burn Stages'],['retirement','Retirement'],
   ['location','Location Alpha'],['tax','Tax Alpha'],
-  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['about','About']
+  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['myportfolio','My Portfolio'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -595,11 +654,17 @@ function setReturnEngine(eng) {
   if (!fundSets[eng]) return;
   selectedEngine = eng;
   funds = fundSets[eng];
-  /* Sync both UI controls */
+  /* Sync retirement select */
   const sel = document.getElementById('rEngine');
   if (sel && sel.value !== eng) sel.value = eng;
+  /* Sync overview engine toggle buttons */
   document.querySelectorAll('#engine-toggle-overview .engine-btn').forEach(b => {
-    b.classList.toggle('active', b.textContent.toLowerCase().includes(eng === 'factor' ? 'factor' : eng === 'sp500' ? 's&p' : 'merriman'));
+    const txt = b.textContent.toLowerCase();
+    const isActive = eng === 'custom' ? b.id === 'engine-btn-custom'
+      : eng === 'factor'   ? txt.includes('factor')
+      : eng === 'sp500'    ? (txt.includes('s&p') || txt.includes('s&#38;p') || txt.includes('blend'))
+      : eng === 'merriman' ? txt.includes('merriman') : false;
+    b.classList.toggle('active', isActive);
   });
   buildFundRows();
   buildLocation();
@@ -1529,6 +1594,302 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   CUSTOM PORTFOLIO BUILDER
+   ═══════════════════════════════════════════════════════════════════ */
+const tickerDB = {
+  /* US Total / Large Blend */
+  'VTI' :{name:'Vanguard Total Stock Market ETF',  er:0.03, div:1.4, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'VOO' :{name:'Vanguard S&P 500 ETF',              er:0.03, div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  'SPY' :{name:'SPDR S&P 500 ETF Trust',            er:0.09, div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  'IVV' :{name:'iShares Core S&P 500 ETF',          er:0.03, div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  'SCHB':{name:'Schwab US Broad Market ETF',        er:0.03, div:1.3, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'FZROX':{name:'Fidelity Zero Total Market',       er:0.00, div:1.4, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'FSKAX':{name:'Fidelity Total Market Index',      er:0.015,div:1.4, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'FXAIX':{name:'Fidelity 500 Index',               er:0.015,div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  /* US Growth */
+  'QQQ' :{name:'Invesco QQQ ETF (Nasdaq-100)',      er:0.20, div:0.6, cat:'US Large Growth',     loc:'Roth',        estRet:0.090},
+  'VUG' :{name:'Vanguard Growth ETF',               er:0.04, div:0.5, cat:'US Large Growth',     loc:'Roth',        estRet:0.088},
+  /* US Value */
+  'VTV' :{name:'Vanguard Value ETF',                er:0.04, div:2.4, cat:'US Large Value',      loc:'Taxable',     estRet:0.088},
+  'AVLV':{name:'Avantis US Large Cap Value ETF',    er:0.15, div:2.0, cat:'US Large Value',      loc:'Taxable',     estRet:0.092},
+  'DFIV':{name:'DFA International Value ETF',       er:0.23, div:3.5, cat:'Intl Large Value',    loc:'Taxable',     estRet:0.082},
+  /* US Small Cap */
+  'VB'  :{name:'Vanguard Small-Cap ETF',            er:0.05, div:1.6, cat:'US Small Blend',      loc:'Traditional', estRet:0.090},
+  'IWM' :{name:'iShares Russell 2000 ETF',          er:0.19, div:1.5, cat:'US Small Blend',      loc:'Traditional', estRet:0.090},
+  'VBR' :{name:'Vanguard Small-Cap Value ETF',      er:0.07, div:2.1, cat:'US Small Value',      loc:'Traditional', estRet:0.095},
+  'AVUV':{name:'Avantis US Small Cap Value ETF',    er:0.25, div:1.5, cat:'US Small Value',      loc:'Traditional', estRet:0.100},
+  'DFSV':{name:'DFA US Small Cap Value ETF',        er:0.30, div:1.8, cat:'US Small Value',      loc:'Traditional', estRet:0.100},
+  'DFAC':{name:'DFA US Core Equity 2 ETF',          er:0.22, div:1.8, cat:'US Large Blend',      loc:'Taxable',     estRet:0.090},
+  /* US Dividend */
+  'SCHD':{name:'Schwab US Dividend Equity ETF',     er:0.06, div:3.5, cat:'US Dividend',         loc:'Taxable',     estRet:0.080},
+  'VIG' :{name:'Vanguard Dividend Appreciation ETF',er:0.06, div:1.8, cat:'US Dividend Growth',  loc:'Taxable',     estRet:0.082},
+  'VYM' :{name:'Vanguard High Dividend Yield ETF',  er:0.06, div:3.0, cat:'US High Dividend',    loc:'Taxable',     estRet:0.078},
+  'JEPI':{name:'JPMorgan Equity Premium Income ETF',er:0.35, div:7.5, cat:'US Covered Call',     loc:'Traditional', estRet:0.070},
+  'JEPQ':{name:'JPMorgan Nasdaq Equity Prem Inc',   er:0.35, div:9.0, cat:'US Covered Call',     loc:'Traditional', estRet:0.070},
+  /* International Developed */
+  'VXUS':{name:'Vanguard Total International ETF',  er:0.07, div:2.8, cat:'Intl Total Market',   loc:'Taxable',     estRet:0.075},
+  'VEA' :{name:'Vanguard FTSE Developed Markets',   er:0.05, div:3.0, cat:'Intl Developed',      loc:'Taxable',     estRet:0.075},
+  'EFA' :{name:'iShares MSCI EAFE ETF',             er:0.32, div:3.0, cat:'Intl Developed',      loc:'Taxable',     estRet:0.075},
+  'FZILX':{name:'Fidelity Zero International',      er:0.00, div:2.5, cat:'Intl Total Market',   loc:'Taxable',     estRet:0.075},
+  'AVDV':{name:'Avantis Intl Small Cap Value ETF',  er:0.36, div:3.5, cat:'Intl Small Value',    loc:'Traditional', estRet:0.092},
+  /* Emerging Markets */
+  'VWO' :{name:'Vanguard FTSE Emerging Markets ETF',er:0.08, div:3.0, cat:'Emerging Markets',    loc:'Roth',        estRet:0.090},
+  'IEMG':{name:'iShares Core MSCI Emerging Markets',er:0.09, div:2.5, cat:'Emerging Markets',    loc:'Roth',        estRet:0.090},
+  'EEM' :{name:'iShares MSCI Emerging Markets ETF', er:0.68, div:2.5, cat:'Emerging Markets',    loc:'Roth',        estRet:0.090},
+  'AVES':{name:'Avantis Emerging Markets Value ETF',er:0.36, div:3.5, cat:'EM Value',            loc:'Roth',        estRet:0.095},
+  'AVEM':{name:'Avantis Emerging Markets ETF',      er:0.33, div:2.8, cat:'Emerging Markets',    loc:'Roth',        estRet:0.090},
+  /* Bonds */
+  'BND' :{name:'Vanguard Total Bond Market ETF',    er:0.03, div:3.5, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  'AGG' :{name:'iShares Core US Aggregate Bond ETF',er:0.03, div:3.2, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  'BNDX':{name:'Vanguard Total Intl Bond ETF',      er:0.07, div:2.5, cat:'Intl Bonds',          loc:'Traditional', estRet:0.040},
+  'VGLT':{name:'Vanguard Long-Term Treasury ETF',   er:0.04, div:3.8, cat:'US Long Bonds',       loc:'Traditional', estRet:0.045},
+  'TLT' :{name:'iShares 20+ Year Treasury Bond ETF',er:0.15, div:4.0, cat:'US Long Bonds',       loc:'Traditional', estRet:0.045},
+  'GOVT':{name:'iShares US Treasury Bond ETF',      er:0.05, div:3.5, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  /* Real Assets */
+  'VNQ' :{name:'Vanguard Real Estate ETF',          er:0.12, div:3.8, cat:'Real Estate',         loc:'Traditional', estRet:0.075},
+  'GLD' :{name:'SPDR Gold Shares',                  er:0.40, div:0.0, cat:'Commodities',         loc:'Traditional', estRet:0.030},
+  'IAU' :{name:'iShares Gold Trust',                er:0.25, div:0.0, cat:'Commodities',         loc:'Traditional', estRet:0.030},
+};
+
+const catEstRet = {
+  'US Total Market':0.085,'US Large Blend':0.085,'US Large Value':0.090,'US Large Growth':0.088,
+  'US Small Blend':0.090,'US Small Value':0.100,'US Dividend':0.080,'US Dividend Growth':0.082,
+  'US High Dividend':0.078,'US Covered Call':0.070,
+  'Intl Total Market':0.075,'Intl Developed':0.075,'Intl Large Value':0.082,'Intl Small Value':0.092,
+  'Emerging Markets':0.090,'EM Value':0.095,
+  'US Bonds':0.045,'Intl Bonds':0.040,'US Long Bonds':0.045,'US Inflation-Linked Bonds':0.030,
+  'Real Estate':0.075,'Commodities':0.030,'Individual Stock':0.085,
+};
+
+/* Pre-populate fundSets / engineMeta so setReturnEngine('custom') never fails */
+fundSets['custom'] = [];
+engineMeta['custom'] = {label:'My Portfolio', ret:0.085, desc:'Custom holdings'};
+
+const customPort = {
+  name: 'My Portfolio',
+  holdings: [],
+  manualRet: null,
+  _nextId: 0,
+};
+
+function cpNextId() { return customPort._nextId++; }
+
+function cpLookup(ticker) {
+  return tickerDB[ticker.trim().toUpperCase()] || null;
+}
+
+function cpComputeStats() {
+  let taxable=0, traditional=0, roth=0, erSum=0, retSum=0, total=0;
+  customPort.holdings.forEach(r => {
+    const v = r.value || 0;
+    if (r.acct === 'Taxable') taxable += v;
+    else if (r.acct === 'Traditional') traditional += v;
+    else roth += v;
+    erSum  += (r.er  || 0) * v;
+    retSum += (catEstRet[r.cat] || 0.085) * v;
+    total  += v;
+  });
+  return {
+    taxable, traditional, roth, total,
+    blendedER:   total > 0 ? erSum  / total : 0,
+    weightedRet: total > 0 ? retSum / total : 0.085,
+  };
+}
+
+function cpBuildFundSet() {
+  const acctTotals = {Taxable:0, Traditional:0, Roth:0};
+  customPort.holdings.forEach(r => { acctTotals[r.acct] = (acctTotals[r.acct]||0) + (r.value||0); });
+  return customPort.holdings.map(r => ({
+    name: r.fundName || r.ticker || 'Holding',
+    ticker: r.ticker || '?',
+    withinAcct: acctTotals[r.acct] > 0 ? (r.value||0) / acctTotals[r.acct] * 100 : 0,
+    er: r.er || 0,
+    cat: r.cat || 'Unknown',
+    loc: r.acct,
+    rationale: `${r.cat||'Custom'} · custom holding`,
+  }));
+}
+
+function cpRenderStats() {
+  const s = cpComputeStats();
+  const ret = customPort.manualRet !== null ? customPort.manualRet : s.weightedRet;
+  if (s.total === 0) {
+    document.getElementById('cp-stats').innerHTML =
+      '<div style="color:var(--muted);font-size:12px;font-family:\'DM Mono\',monospace;">Add holdings to see summary</div>';
+    return;
+  }
+  document.getElementById('cp-stats').innerHTML = `
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-family:'DM Mono',monospace;margin-bottom:10px;">Portfolio summary</div>
+    <div class="cp-stat-grid">
+      <div class="cp-stat-item"><div class="cp-stat-label">Taxable</div><div class="cp-stat-val" style="color:var(--taxable-color);">${fmtD(s.taxable)}</div></div>
+      <div class="cp-stat-item"><div class="cp-stat-label">Traditional</div><div class="cp-stat-val" style="color:var(--trad-color);">${fmtD(s.traditional)}</div></div>
+      <div class="cp-stat-item"><div class="cp-stat-label">Roth</div><div class="cp-stat-val" style="color:var(--roth-color);">${fmtD(s.roth)}</div></div>
+      <div class="cp-stat-item"><div class="cp-stat-label">Total</div><div class="cp-stat-val">${fmtM(s.total)}</div></div>
+      <div class="cp-stat-item"><div class="cp-stat-label">Blended ER</div><div class="cp-stat-val">${s.blendedER.toFixed(2)}%</div></div>
+      <div class="cp-stat-item"><div class="cp-stat-label">Est. Return</div><div class="cp-stat-val" style="color:var(--accent3);">${(ret*100).toFixed(1)}%${customPort.manualRet!==null?' (manual)':' (auto)'}</div></div>
+    </div>`;
+}
+
+function cpRenderHoldings() {
+  const h = customPort.holdings;
+  let tbody = '';
+  if (h.length === 0) {
+    tbody = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;font-family:\'DM Mono\',monospace;font-size:12px;">No holdings yet — click + Add Holding to start</td></tr>';
+  } else {
+    tbody = h.map(r => {
+      const acctColor = r.acct==='Taxable'?'var(--taxable-color)':r.acct==='Traditional'?'var(--trad-color)':'var(--roth-color)';
+      const badge = r.ticker
+        ? (tickerDB[r.ticker.toUpperCase()]
+          ? '<span class="cp-badge">✓ known</span>'
+          : '<span class="cp-unknown">? unknown</span>')
+        : '';
+      return `<tr>
+        <td style="white-space:nowrap;">
+          <input class="cp-input cp-ticker" value="${r.ticker}" placeholder="VOO"
+            style="width:68px;" maxlength="8"
+            onblur="cpUpdateTicker(${r.id},this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+          ${badge}
+        </td>
+        <td><input class="cp-input" value="${escHtml(r.fundName)}" placeholder="Fund name"
+          style="width:210px;"
+          onchange="cpUpdateField(${r.id},'fundName',this.value)"></td>
+        <td>
+          <select class="cp-input" onchange="cpUpdateField(${r.id},'acct',this.value)" style="color:${acctColor};">
+            <option value="Taxable"${r.acct==='Taxable'?' selected':''}>Taxable</option>
+            <option value="Traditional"${r.acct==='Traditional'?' selected':''}>Traditional</option>
+            <option value="Roth"${r.acct==='Roth'?' selected':''}>Roth</option>
+          </select>
+        </td>
+        <td style="white-space:nowrap;">$<input class="cp-input" value="${r.value>0?formatNum(r.value):''}"
+          placeholder="500,000" style="width:105px;text-align:right;"
+          onchange="cpUpdateField(${r.id},'value',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()"></td>
+        <td style="white-space:nowrap;"><input class="cp-input" type="number" value="${r.er}" step="0.01" min="0" max="3"
+          style="width:55px;" onchange="cpUpdateField(${r.id},'er',this.value)">%</td>
+        <td><input class="cp-input" value="${escHtml(r.cat)}" placeholder="US Large Blend"
+          style="width:140px;" onchange="cpUpdateField(${r.id},'cat',this.value)"></td>
+        <td><button onclick="cpRemoveRow(${r.id})"
+          style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;">×</button></td>
+      </tr>`;
+    }).join('');
+  }
+  document.getElementById('cp-holdings-table').innerHTML = `
+    <table class="cp-table">
+      <thead><tr>
+        <th>Ticker</th><th>Fund / Name</th><th>Account</th>
+        <th>$ Value</th><th>ER %</th><th>Category</th><th></th>
+      </tr></thead>
+      <tbody>${tbody}</tbody>
+    </table>`;
+}
+
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+function cpAddRow() {
+  customPort.holdings.push({id:cpNextId(), ticker:'', fundName:'', acct:'Taxable', value:0, er:0, div:0, cat:'US Large Blend'});
+  cpRenderHoldings();
+}
+
+function cpRemoveRow(id) {
+  customPort.holdings = customPort.holdings.filter(h => h.id !== id);
+  cpRenderHoldings();
+  cpRenderStats();
+}
+
+function cpUpdateTicker(id, rawTicker) {
+  const row = customPort.holdings.find(h => h.id === id);
+  if (!row) return;
+  const ticker = rawTicker.trim().toUpperCase();
+  row.ticker = ticker;
+  const data = cpLookup(ticker);
+  if (data) {
+    if (!row.fundName) row.fundName = data.name;
+    row.er  = data.er;
+    row.div = data.div;
+    row.cat = data.cat;
+    if (row.acct === 'Taxable' && data.loc !== 'Taxable') row.acct = data.loc;
+  }
+  cpRenderHoldings();
+  cpRenderStats();
+}
+
+function cpUpdateField(id, field, raw) {
+  const row = customPort.holdings.find(h => h.id === id);
+  if (!row) return;
+  if      (field === 'value')    row.value    = parseFloat(String(raw).replace(/[^0-9.]/g,'')) || 0;
+  else if (field === 'er')       row.er       = parseFloat(raw) || 0;
+  else if (field === 'acct')     row.acct     = raw;
+  else if (field === 'fundName') row.fundName = raw;
+  else if (field === 'cat')      row.cat      = raw;
+  cpRenderStats();
+}
+
+function cpRefreshEngineBtn() {
+  const toggle = document.getElementById('engine-toggle-overview');
+  if (!toggle) return;
+  let btn = document.getElementById('engine-btn-custom');
+  if (!btn) {
+    btn = document.createElement('button');
+    btn.id = 'engine-btn-custom';
+    btn.className = 'engine-btn';
+    btn.onclick = () => { if (fundSets['custom'].length) setReturnEngine('custom'); else showTab('myportfolio'); };
+    toggle.appendChild(btn);
+  }
+  btn.textContent = customPort.name || 'My Portfolio';
+  /* Also add/update option in retirement select */
+  const sel = document.getElementById('rEngine');
+  if (sel) {
+    let opt = sel.querySelector('option[value="custom"]');
+    if (!opt) { opt = document.createElement('option'); opt.value = 'custom'; sel.appendChild(opt); }
+    const ret = engineMeta['custom'] ? (engineMeta['custom'].ret*100).toFixed(1) : '';
+    opt.textContent = `${customPort.name||'My Portfolio'}${ret?' ('+ret+'%)':''}`;
+  }
+}
+
+function cpActivate() {
+  if (customPort.holdings.length === 0) {
+    const st = document.getElementById('cp-activate-status');
+    if (st) { st.textContent = '⚠ Add at least one holding first'; setTimeout(()=>st.textContent='',3000); }
+    return;
+  }
+  const stats = cpComputeStats();
+  if (stats.total === 0) {
+    const st = document.getElementById('cp-activate-status');
+    if (st) { st.textContent = '⚠ Enter dollar values for your holdings'; setTimeout(()=>st.textContent='',3000); }
+    return;
+  }
+
+  /* Build engine */
+  const ret = customPort.manualRet !== null ? customPort.manualRet : stats.weightedRet;
+  fundSets['custom']   = cpBuildFundSet();
+  engineMeta['custom'] = {
+    label: `${customPort.name||'My Portfolio'} (${(ret*100).toFixed(1)}%)`,
+    ret,
+    desc: `${customPort.holdings.length} holdings · blended ER ${stats.blendedER.toFixed(2)}%`,
+  };
+
+  /* Update portfolio balances from actual holdings */
+  if (stats.taxable)     state.taxable     = stats.taxable;
+  if (stats.traditional) state.traditional = stats.traditional;
+  if (stats.roth)        state.roth        = stats.roth;
+
+  cpRefreshEngineBtn();
+  setReturnEngine('custom');
+  buildOverview();
+
+  const btn = document.getElementById('cp-activate-btn');
+  if (btn) { btn.textContent = '✓ Active — all tabs updated'; btn.classList.add('active'); setTimeout(()=>{ btn.textContent='Activate This Portfolio →'; btn.classList.remove('active'); },3500); }
+  const st = document.getElementById('cp-activate-status');
+  if (st) { st.textContent = `${customPort.holdings.length} holdings · ${fmtM(stats.total)} total`; }
+}
+
+function buildCustomPortfolio() {
+  cpRenderHoldings();
+  cpRenderStats();
+}
+
 /* ═══ INIT ═══ */
 buildOverview();
 buildLocation();
@@ -1536,6 +1897,7 @@ solveTax();
 buildBurn();
 updateRetirement();
 buildTaxAlphaTimeline();
+buildCustomPortfolio();
 </script>
 </body>
 </html>
