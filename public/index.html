@@ -445,8 +445,9 @@ body {
   <div id="tab-retirement" class="tab-panel">
     <div class="section-title">Richer Retirement — Bengen SAFEMAX</div>
     <div class="safemax-hero">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-family:'DM Mono',monospace;">Your Adjusted SAFEMAX</div>
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-family:'DM Mono',monospace;">Historical Safe Withdrawal Ceiling</div>
       <div class="safemax-num" id="safemax-display">4.80%</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Max rate that survived every 30-yr historical period (Bengen 1994) · Your actual withdrawals are driven by Burn Stage spending below</div>
       <div style="font-size:12px;color:var(--muted);margin-top:6px;" id="safemax-sub"></div>
     </div>
     <div class="v3-grid2" style="margin-bottom:16px;">
@@ -537,6 +538,130 @@ body {
     </div>
   </div>
 
+  <!-- ═══ MONTE CARLO ═══ -->
+  <div id="tab-montecarlo" class="tab-panel">
+    <div class="section-title">Monte Carlo Simulation</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">
+      Withdrawals are driven by your <strong style="color:var(--text);">Burn Stage spending</strong> — not the SAFEMAX rate.
+      SAFEMAX is historically calibrated (100% survival across all 30-year periods since 1926) but is a different methodology from Monte Carlo.
+      Monte Carlo generates random return sequences — including sequences worse than any in recorded history — and measures how often your portfolio survives your actual planned spending.
+    </p>
+    <div style="padding:10px 14px;background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;margin-bottom:20px;font-size:12px;color:var(--muted);line-height:1.7;">
+      <strong style="color:var(--accent);">Why these can differ:</strong>
+      A 4% SAFEMAX has ~100% historical success but ~85% Monte Carlo success with the same return distribution — because Monte Carlo can generate sequences that never existed historically (e.g. 40% crash in year 1, flat for 5 years).
+      If your CWR is well below SAFEMAX, Monte Carlo success should approach 100%.
+    </div>
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
+      <button class="action-btn" onclick="buildMonteCarlo()" style="padding:9px 22px;font-size:13px;">▶ Run 1,000 Simulations</button>
+      <span style="font-size:12px;color:var(--muted);">Uses CAPE/horizon/income from Retirement tab · draws your actual Burn Stage amounts each year.</span>
+    </div>
+    <div class="metrics" id="mc-metrics" style="margin-bottom:20px;"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.06em;">Portfolio balance over retirement horizon — 1,000 simulations</div>
+      <canvas id="mc-canvas" style="width:100%;display:block;"></canvas>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="fund-table" id="mc-table" style="min-width:600px;"></table>
+    </div>
+  </div>
+
+  <!-- ═══ ROTH CONVERT ═══ -->
+  <div id="tab-rothconvert" class="tab-panel">
+    <div class="section-title">Roth Conversion Optimizer</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
+      The window between retirement and Social Security / RMD start (age 73) is your prime bracket-arbitrage opportunity.
+      Converting Traditional → Roth now locks in today's low rate instead of paying higher rates on forced RMDs later.
+    </p>
+    <div class="v3-grid2" style="margin-bottom:20px;">
+      <div class="alpha-card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Conversion Settings</div>
+        <div class="input-group">
+          <label>Filing status</label>
+          <select class="v3-input v3-select" id="rc-filing" onchange="rcState.filing=this.value;buildRothConvert();">
+            <option value="mfj">Married Filing Jointly</option>
+            <option value="single">Single</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Convert up to top of bracket</label>
+          <select class="v3-input v3-select" id="rc-target-bracket" onchange="rcState.targetBracket=+this.value;buildRothConvert();">
+            <option value="0.12">12% bracket</option>
+            <option value="0.22" selected>22% bracket (recommended)</option>
+            <option value="0.24">24% bracket</option>
+            <option value="0.32">32% bracket</option>
+          </select>
+        </div>
+        <div class="input-group" style="margin-bottom:0;">
+          <label>Other ordinary income during window (annual)</label>
+          <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span>
+            <input type="number" class="v3-input" id="rc-other-income" value="0" min="0" step="1000" style="width:130px;" oninput="rcState.otherIncome=+this.value;buildRothConvert();">
+          </div>
+        </div>
+      </div>
+      <div class="alpha-card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent2);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Conversion Window</div>
+        <div id="rc-window-info" style="font-size:13px;line-height:1.8;color:var(--muted);"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+          Window closes at the earlier of your SS claim age or age 73 (RMD start).<br>
+          To maximize the window, claim SS at 70 — gives up to 11 conversion years.
+        </div>
+      </div>
+    </div>
+    <div class="metrics" id="rc-summary" style="margin-bottom:24px;"></div>
+    <div class="section-title" style="margin-top:0;">Year-by-Year Conversion Schedule</div>
+    <div style="overflow-x:auto;">
+      <table class="fund-table" id="rc-table" style="min-width:700px;"></table>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:16px;padding:12px 16px;background:var(--surface);border-radius:6px;line-height:1.7;">
+      ⓘ Brackets are 2025 IRS figures (OBBBA). RMD tax savings are estimated using the age-73 RMD divisor (26.5)
+      applied to your projected Traditional balance. Net benefit is a rough estimate — consult a CPA for a full conversion strategy.
+    </div>
+  </div>
+
+  <!-- ═══ HEALTHCARE BRIDGE ═══ -->
+  <div id="tab-healthcare" class="tab-panel">
+    <div class="section-title">Healthcare Bridge</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;">
+      For early retirees under 65, Medicare isn't available yet. ACA marketplace coverage can cost
+      $12K–$30K/yr per person — one of the biggest hidden costs of early retirement.
+      Strategically managing your MAGI can unlock large ACA subsidies.
+    </p>
+    <div class="v3-grid2" style="margin-bottom:20px;">
+      <div class="alpha-card">
+        <div style="font-size:12px;font-weight:600;color:var(--danger);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Your Situation</div>
+        <div class="input-group">
+          <label>People to cover</label>
+          <select class="v3-input v3-select" id="hc-people" onchange="hcState.people=+this.value;buildHealthcareBridge();">
+            <option value="1">1 — you only</option>
+            <option value="2">2 — you + spouse/partner</option>
+            <option value="3">3 — you + spouse + 1 child</option>
+            <option value="4">4 — you + spouse + 2 children</option>
+          </select>
+        </div>
+        <div class="input-group" style="margin-bottom:0;">
+          <label>Expected MAGI during bridge years</label>
+          <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span>
+            <input type="number" class="v3-input" id="hc-magi" value="60000" min="0" step="5000" style="width:140px;" oninput="hcState.magi=+this.value;buildHealthcareBridge();">
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:5px;">Dividends, cap gains, Roth conversions, pension all count as MAGI. Lower MAGI = larger subsidy.</div>
+        </div>
+      </div>
+      <div class="alpha-card">
+        <div style="font-size:12px;font-weight:600;color:var(--accent3);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">ACA Subsidy Rules (2025)</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.8;">
+          <div>• Premium capped at <strong style="color:var(--text);">8.5% of MAGI</strong> (IRA extended rules)</div>
+          <div>• FPL 2025: <span style="color:var(--accent);">$15,060/single · $20,440/couple</span></div>
+          <div>• 100–400% FPL: maximum subsidy tier</div>
+          <div>• Roth conversions count as MAGI — coordinate carefully</div>
+          <div style="margin-top:8px;padding:6px 10px;background:var(--surface2);border-radius:4px;color:var(--accent2);">
+            💡 Keeping MAGI under 400% FPL (~$60K single / $80K couple) can save $8K–$15K/yr in premiums
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="hc-content"></div>
+  </div>
+
   <!-- ═══ ABOUT ═══ -->
   <div id="tab-about" class="tab-panel">
     <div class="about-hero">
@@ -624,8 +749,8 @@ body {
    ═══════════════════════════════════════════════════════════════════ */
 const tabDefs = [
   ['overview','My Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
-  ['location','Location Alpha'],['tax','Tax Alpha'],
-  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['about','About']
+  ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
+  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -1700,13 +1825,21 @@ function updateRetirement(){
   const s1Annual = burnState.cats.reduce((s,c) => s + c.s1 * 12, 0);
   const s2Annual = burnState.cats.reduce((s,c) => s + c.s2 * 12, 0);
   const s3Annual = burnState.cats.reduce((s,c) => s + c.s3 * 12, 0);
+  const safemaxWd = retirePortfolio * adj / 100; /* reference only — not the draw driver */
 
-  let wd = retirePortfolio * adj / 100;
   const rows = [];
   let maxW = 0;
 
   for (let y = 1; y <= horizon; y++) {
     const age = state.retireAge + y - 1;
+
+    /* Actual spend target for this year — burn stage, inflation-adjusted */
+    const yr0       = y - 1;
+    const stg       = yr0 < 10 ? 0 : yr0 < 20 ? 1 : 2;
+    const stgAnnual = [s1Annual, s2Annual, s3Annual][stg];
+    const stgStart  = stg === 0 ? 0 : stg === 1 ? 10 : 20;
+    const burnNeed  = stgAnnual * Math.pow(1 + infRate, yr0 - stgStart);
+
     const totalStart = balTax + balTrad + balRoth;
     if (totalStart <= 0) {
       for (let f = y; f <= horizon; f++)
@@ -1723,8 +1856,8 @@ function updateRetirement(){
     const othAnnual = (incomeState.otherAnnual && age <= (incomeState.otherEndAge||999)) ? incomeState.otherAnnual : 0;
     const extInc    = ssAnnual + penAnnual + othAnnual;
 
-    /* Remaining spend target after mandatory dividends and external income */
-    let need = Math.max(0, wd - divIncome - extInc);
+    /* Portfolio only covers what burn need minus guaranteed income minus dividends requires */
+    let need = Math.max(0, burnNeed - divIncome - extInc);
 
     /* 3. Taxable cap gains withdrawal (base — may grow below if deficit) */
     let taxDraw = Math.min(need, Math.max(0, balTax));
@@ -1767,14 +1900,7 @@ function updateRetirement(){
     let totalIncome   = ordIncome + ltcgIncome + rothDraw + extInc;
     let totalDraw     = taxDraw + tradDraw + rothDraw;
 
-    /* ── Burn need for this year (inflation resets at each stage start) */
-    const yr0       = y - 1;  // 0-based year index
-    const stg       = yr0 < 10 ? 0 : yr0 < 20 ? 1 : 2;
-    const stgAnnual = [s1Annual, s2Annual, s3Annual][stg];
-    const stgStart  = stg === 0 ? 0 : stg === 1 ? 10 : 20;
-    const burnNeed  = stgAnnual * Math.pow(1 + infRate, yr0 - stgStart);
-
-    /* ── Deficit fill — sell extra taxable equity if after-tax < burn need */
+    /* ── Deficit fill — sell extra taxable equity if after-tax < burn need (covers tax grossup) */
     let extraEquity = 0;
     if (afterTax < burnNeed && balTax > 0) {
       const shortfall = burnNeed - afterTax;
@@ -1814,14 +1940,15 @@ function updateRetirement(){
                totalDraw, totalIncome, afterTax, taxPaid, burnNeed, surplus, extraEquity,
                end:totalEnd, cwr, tradLocked, isRMD, ssAnnual, penAnnual, othAnnual, extInc, ssTaxFrac});
     if (totalIncome > maxW) maxW = totalIncome;
-    wd *= (1 + infRate);
   }
 
-  /* Hero subtext — use exact bracket tax from year 1 */
+  /* Hero subtext */
   if (rows.length > 0) {
     const r0 = rows[0];
+    const yr1CWR = r0.start > 0 ? r0.totalDraw / r0.start * 100 : 0;
+    const safeOk = yr1CWR <= adj;
     document.getElementById('safemax-sub').textContent =
-      `SAFEMAX ${sm.toFixed(1)}% · Portfolio at retirement: ${fmtM(retirePortfolio)} · Yr-1 total income: ${fmtD(r0.totalIncome)} (${fmtD(r0.extInc)} guaranteed) · After-tax: ${fmtD(r0.afterTax)} · Monthly: ${fmtD(r0.afterTax/12)}`;
+      `SAFEMAX ceiling: ${sm.toFixed(1)}% · Your Yr-1 CWR: ${yr1CWR.toFixed(1)}% ${safeOk ? '✓' : '⚠ exceeds SAFEMAX'} · Portfolio at retirement: ${fmtM(retirePortfolio)} · After-tax income: ${fmtD(r0.afterTax)} · Monthly: ${fmtD(r0.afterTax/12)}`;
   }
 
   /* Stacked bar */
@@ -1895,6 +2022,8 @@ function updateRetirement(){
   buildSsComparison();
   buildIncomeFloorSummary();
   if (typeof buildNetWorth === 'function') buildNetWorth();
+  if (typeof buildRothConvert === 'function') buildRothConvert();
+  if (typeof buildHealthcareBridge === 'function') buildHealthcareBridge();
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -2466,6 +2595,463 @@ function buildNetWorth() {
     }).join('')}</tbody>`;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   MONTE CARLO SIMULATION
+   ═══════════════════════════════════════════════════════════════════ */
+const ENGINE_VOL = { factor: 0.156, sp500: 0.170, merriman: 0.180, custom: 0.160 };
+
+function mcRandn() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function buildMonteCarlo() {
+  const canvas = document.getElementById('mc-canvas');
+  if (!canvas) return;
+
+  const cape    = +(document.getElementById('rCape')?.value    || 28);
+  const regime  = document.getElementById('rRegime')?.value    || 'moderate';
+  const horizon = +(document.getElementById('rHorizon')?.value || 30);
+  const sm      = getSafemax(cape, regime);
+  const infRate = regime === 'low' ? 0.02 : regime === 'moderate' ? 0.035 : 0.055;
+  const eng     = selectedEngine in ENGINE_VOL ? selectedEngine : 'factor';
+  const mu      = engineNetRet();
+  const sigma   = ENGINE_VOL[eng];
+  const accumYrs = Math.max(0, state.retireAge - state.currentAge);
+  const N = 1000;
+
+  /* Burn stage amounts (same as retirement model) */
+  const mcS1 = burnState.cats.reduce((s,c)=>s+c.s1*12,0);
+  const mcS2 = burnState.cats.reduce((s,c)=>s+c.s2*12,0);
+  const mcS3 = burnState.cats.reduce((s,c)=>s+c.s3*12,0);
+  function mcBurnNeed(yr0) {
+    const stg=[mcS1,mcS2,mcS3][yr0<10?0:yr0<20?1:2];
+    const start=yr0<10?0:yr0<20?10:20;
+    return stg * Math.pow(1+infRate, yr0-start);
+  }
+
+  const results = [];
+  for (let sim = 0; sim < N; sim++) {
+    let bTax = state.taxable, bTrad = state.traditional, bRoth = state.roth;
+    for (let y = 0; y < accumYrs; y++) {
+      if (y < state.additions.length) { const a = state.additions[y]; bTax+=a.taxable; bTrad+=a.traditional; bRoth+=a.roth; }
+      const r = mu + sigma * mcRandn();
+      bTax *= (1+r); bTrad *= (1+r); bRoth *= (1+r);
+    }
+    const yearVals = [bTax+bTrad+bRoth];
+    for (let y = 1; y <= horizon; y++) {
+      const age = state.retireAge + y - 1;
+      if (bTax+bTrad+bRoth <= 0) { yearVals.push(0); continue; }
+      const burnNeed = mcBurnNeed(y-1);
+      const extInc   = extIncome(age);
+      const divInc   = bTax * 0.02;
+      let need = Math.max(0, burnNeed - divInc - extInc);
+      const tk = Math.min(need, Math.max(0,bTax)); bTax=Math.max(0,bTax-tk); need-=tk;
+      if (need>0&&age>=60){ const tt=Math.min(need,Math.max(0,bTrad)); bTrad=Math.max(0,bTrad-tt); need-=tt; }
+      if (need>0){ const tr=Math.min(need,Math.max(0,bRoth)); bRoth=Math.max(0,bRoth-tr); }
+      const r = mu + sigma * mcRandn();
+      bTax *= (1+r); bTrad *= (1+r); bRoth *= (1+r);
+      yearVals.push(Math.max(0, bTax+bTrad+bRoth));
+    }
+    results.push(yearVals);
+  }
+
+  const yrs = horizon + 1;
+  const pctLevels = [10, 25, 50, 75, 90];
+  const pctData = pctLevels.map(p =>
+    Array.from({length: yrs}, (_, y) => {
+      const vals = results.map(r => r[y]||0).sort((a,b)=>a-b);
+      return vals[Math.max(0, Math.floor(p/100*(vals.length-1)))];
+    })
+  );
+  const successRates = Array.from({length: yrs}, (_, y) =>
+    results.filter(r => (r[y]||0) > 0).length / N
+  );
+  const finalSuccess = successRates[yrs-1];
+
+  /* Deterministic baseline (same burn-driven logic, fixed return) */
+  let dTax=state.taxable, dTrad=state.traditional, dRoth=state.roth;
+  for (let y=0;y<accumYrs;y++){
+    if(y<state.additions.length){const a=state.additions[y];dTax+=a.taxable;dTrad+=a.traditional;dRoth+=a.roth;}
+    dTax*=(1+mu);dTrad*=(1+mu);dRoth*=(1+mu);
+  }
+  const detLine=[dTax+dTrad+dRoth];
+  for(let y=1;y<=horizon;y++){
+    const age=state.retireAge+y-1;
+    if(dTax+dTrad+dRoth<=0){detLine.push(0);continue;}
+    const burnNeed=mcBurnNeed(y-1); const extInc=extIncome(age); const divInc=dTax*0.02;
+    let need=Math.max(0,burnNeed-divInc-extInc);
+    const tk=Math.min(need,Math.max(0,dTax));dTax=Math.max(0,dTax-tk);need-=tk;
+    if(need>0&&age>=60){const tt=Math.min(need,Math.max(0,dTrad));dTrad=Math.max(0,dTrad-tt);need-=tt;}
+    if(need>0){const tr=Math.min(need,Math.max(0,dRoth));dRoth=Math.max(0,dRoth-tr);}
+    dTax*=(1+mu);dTrad*=(1+mu);dRoth*=(1+mu);
+    detLine.push(Math.max(0,dTax+dTrad+dRoth));
+  }
+
+  /* Metrics */
+  const p10=pctData[0][yrs-1], p50=pctData[2][yrs-1], p90=pctData[4][yrs-1];
+  const yr1Burn = mcBurnNeed(0);
+  document.getElementById('mc-metrics').innerHTML = `
+    <div class="metric-card"><div class="label">Success rate · yr ${horizon}</div>
+      <div class="value" style="color:${finalSuccess>=0.9?'var(--accent3)':finalSuccess>=0.7?'var(--accent)':'var(--danger)'};">${(finalSuccess*100).toFixed(0)}%</div>
+      <div class="sub">of 1,000 simulations — drawing ${fmtD(yr1Burn)}/yr</div></div>
+    <div class="metric-card"><div class="label">Median outcome · yr ${horizon}</div>
+      <div class="value accent2">${fmtM(p50)}</div><div class="sub">50th percentile</div></div>
+    <div class="metric-card"><div class="label">Pessimistic · yr ${horizon}</div>
+      <div class="value" style="color:var(--danger);">${fmtM(p10)}</div><div class="sub">10th percentile (bad sequence)</div></div>
+    <div class="metric-card"><div class="label">Optimistic · yr ${horizon}</div>
+      <div class="value accent3">${fmtM(p90)}</div><div class="sub">90th percentile</div></div>`;
+
+  /* Canvas */
+  canvas.width = 900; canvas.height = 300;
+  const ctx = canvas.getContext('2d');
+  const W=900, H=300, pad={top:20,right:20,bot:36,left:80};
+  const cW=W-pad.left-pad.right, cH=H-pad.top-pad.bot;
+  const maxVal = Math.max(...pctData[4].filter(v=>v>0), detRetPf) * 1.05;
+  const xP = y => pad.left + (y/(yrs-1))*cW;
+  const yP = v => pad.top + cH - Math.min(cH, (v/maxVal)*cH);
+
+  ctx.fillStyle='#111520'; ctx.fillRect(0,0,W,H);
+
+  /* Grid */
+  const nGridH = 5;
+  for(let i=0;i<=nGridH;i++){
+    const v = maxVal*i/nGridH; const yy = yP(v);
+    ctx.strokeStyle='#1e2a3a'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(pad.left,yy); ctx.lineTo(W-pad.right,yy); ctx.stroke();
+    ctx.fillStyle='#6b7a94'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='right';
+    ctx.fillText(fmtM(v), pad.left-5, yy+3);
+  }
+  for(let y=0;y<yrs;y+=5){
+    const x=xP(y);
+    ctx.strokeStyle='#1e2a3a'; ctx.lineWidth=0.5; ctx.beginPath(); ctx.moveTo(x,pad.top); ctx.lineTo(x,H-pad.bot); ctx.stroke();
+    ctx.fillStyle='#6b7a94'; ctx.font='9px DM Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText('Yr'+y, x, H-pad.bot+12);
+  }
+
+  /* 10–90 band */
+  ctx.beginPath();
+  pctData[0].forEach((v,i)=>i===0?ctx.moveTo(xP(i),yP(v)):ctx.lineTo(xP(i),yP(v)));
+  pctData[4].slice().reverse().forEach((v,i)=>ctx.lineTo(xP(yrs-1-i),yP(v)));
+  ctx.closePath(); ctx.fillStyle='rgba(91,141,238,0.13)'; ctx.fill();
+
+  /* 25–75 band */
+  ctx.beginPath();
+  pctData[1].forEach((v,i)=>i===0?ctx.moveTo(xP(i),yP(v)):ctx.lineTo(xP(i),yP(v)));
+  pctData[3].slice().reverse().forEach((v,i)=>ctx.lineTo(xP(yrs-1-i),yP(v)));
+  ctx.closePath(); ctx.fillStyle='rgba(91,141,238,0.28)'; ctx.fill();
+
+  /* Median */
+  ctx.beginPath(); ctx.strokeStyle='#5b8dee'; ctx.lineWidth=2.5;
+  pctData[2].forEach((v,i)=>i===0?ctx.moveTo(xP(i),yP(v)):ctx.lineTo(xP(i),yP(v))); ctx.stroke();
+
+  /* Deterministic */
+  ctx.beginPath(); ctx.strokeStyle='#c8a96e'; ctx.lineWidth=1.5; ctx.setLineDash([6,4]);
+  detLine.forEach((v,i)=>i===0?ctx.moveTo(xP(i),yP(v)):ctx.lineTo(xP(i),yP(v))); ctx.stroke(); ctx.setLineDash([]);
+
+  /* Legend */
+  const lItems=[
+    {color:'rgba(91,141,238,0.5)',label:'10th–90th pct range',fill:true},
+    {color:'rgba(91,141,238,0.8)',label:'25th–75th pct range',fill:true},
+    {color:'#5b8dee',label:'Median (50th pct)',line:true},
+    {color:'#c8a96e',label:'Deterministic (no randomness)',dash:true},
+  ];
+  ctx.font='10px DM Sans,sans-serif'; let lx=pad.left+10,ly=pad.top+14;
+  lItems.forEach(({color,label,fill,line,dash})=>{
+    if(fill){ctx.fillStyle=color;ctx.fillRect(lx,ly-9,18,9);}
+    else if(line){ctx.strokeStyle=color;ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(lx,ly-4);ctx.lineTo(lx+18,ly-4);ctx.stroke();}
+    else{ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.setLineDash([5,3]);ctx.beginPath();ctx.moveTo(lx,ly-4);ctx.lineTo(lx+18,ly-4);ctx.stroke();ctx.setLineDash([]);}
+    ctx.fillStyle='#e8edf5';ctx.textAlign='left';ctx.fillText(label,lx+22,ly);
+    lx+=160;
+  });
+
+  /* Summary table */
+  let tbl=`<thead><tr><th>Year</th><th>Age</th><th style="color:var(--danger);">10th pct</th><th style="color:var(--accent);">25th pct</th><th style="color:var(--accent2);">Median (50th)</th><th style="color:var(--accent3);">75th pct</th><th style="color:var(--accent3);">90th pct</th><th>Success</th></tr></thead><tbody>`;
+  [5,10,15,20,25,30].filter(y=>y<yrs).forEach(y=>{
+    const age=state.retireAge+y; const sr=successRates[y]||0;
+    tbl+=`<tr><td style="font-family:'DM Mono',monospace;">${y}</td><td style="font-family:'DM Mono',monospace;font-weight:600;">${age}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--danger);">${fmtM(pctData[0][y])}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent);">${fmtM(pctData[1][y])}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent2);font-weight:600;">${fmtM(pctData[2][y])}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent3);">${fmtM(pctData[3][y])}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent3);">${fmtM(pctData[4][y])}</td>
+      <td style="font-family:'DM Mono',monospace;color:${sr>=0.9?'var(--accent3)':sr>=0.7?'var(--accent)':'var(--danger)'};">${(sr*100).toFixed(0)}%</td></tr>`;
+  });
+  tbl+='</tbody>';
+  document.getElementById('mc-table').innerHTML=tbl;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ROTH CONVERSION OPTIMIZER
+   ═══════════════════════════════════════════════════════════════════ */
+let rcState = { filing: 'mfj', targetBracket: 0.22, otherIncome: 0 };
+
+function rcGetBracketTops(filing) {
+  let cum = 0;
+  return brackets[filing].map(([w, r]) => {
+    cum = w === Infinity ? Infinity : cum + w;
+    return { top: cum, rate: r };
+  });
+}
+
+function rcBracketSpace(filing, taxableIncome, targetRate) {
+  let topOfTarget = 0;
+  for (const {top, rate} of rcGetBracketTops(filing)) {
+    if (rate <= targetRate) topOfTarget = top;
+    else break;
+  }
+  if (topOfTarget === Infinity) return 800000;
+  return Math.max(0, topOfTarget - taxableIncome);
+}
+
+function rcMarginalTax(filing, taxableIncome, amount) {
+  if (amount <= 0) return 0;
+  let tax = 0, remaining = amount, prev = 0;
+  for (const {top, rate} of rcGetBracketTops(filing)) {
+    if (remaining <= 0) break;
+    if (top <= taxableIncome) { prev = top; continue; }
+    const start = Math.max(prev, taxableIncome);
+    const end   = top === Infinity ? start + remaining : top;
+    const space = Math.min(remaining, end - start);
+    tax += space * rate; remaining -= space; prev = top;
+  }
+  return tax;
+}
+
+function buildRothConvert() {
+  const netRet   = engineNetRet();
+  const accumYrs = Math.max(0, state.retireAge - state.currentAge);
+  let bTax=state.taxable, bTrad=state.traditional, bRoth=state.roth;
+  for(let y=0;y<accumYrs;y++){
+    if(y<state.additions.length){const a=state.additions[y];bTax+=a.taxable;bTrad+=a.traditional;bRoth+=a.roth;}
+    bTax*=(1+netRet);bTrad*=(1+netRet);bRoth*=(1+netRet);
+  }
+
+  const windowEnd = Math.min(incomeState.ssClaimAge || 67, 73);
+  const windowYrs = Math.max(0, windowEnd - state.retireAge);
+  const fil       = rcState.filing;
+  const sd        = stdDed[fil];
+  const targetRate= rcState.targetBracket;
+
+  /* Window info card */
+  const wiEl = document.getElementById('rc-window-info');
+  if (wiEl) wiEl.innerHTML = `
+    <div style="margin-bottom:4px;"><span style="color:var(--muted);">Retirement age:</span> <strong style="color:var(--accent);font-family:'DM Mono',monospace;">${state.retireAge}</strong></div>
+    <div style="margin-bottom:4px;"><span style="color:var(--muted);">Window closes at:</span> <strong style="color:var(--accent2);font-family:'DM Mono',monospace;">${windowEnd}</strong>
+      <span style="font-size:11px;color:var(--muted);"> (${windowEnd===73?'RMD start':'SS claim age'})</span></div>
+    <div style="margin-bottom:4px;"><span style="color:var(--muted);">Conversion years:</span> <strong style="font-family:'DM Mono',monospace;${windowYrs>5?'color:var(--accent3)':'color:var(--accent)'};">${windowYrs} years</strong></div>
+    <div style="margin-bottom:4px;"><span style="color:var(--muted);">Trad at retirement:</span> <strong style="font-family:'DM Mono',monospace;">${fmtM(bTrad)}</strong></div>`;
+
+  const rows = [];
+  let totalConverted=0, totalTax=0;
+  let cTax=bTax, cTrad=bTrad, cRoth=bRoth;
+  let noConvTrad=bTrad;
+
+  for(let y=0;y<Math.min(windowYrs,20);y++){
+    const age = state.retireAge+y;
+    const pen = (incomeState.pensionMonthly||0)*12;
+    const oth = (incomeState.otherAnnual && age<=(incomeState.otherEndAge||999)) ? incomeState.otherAnnual : 0;
+    const extraOrd = rcState.otherIncome||0;
+    const baseOrd  = pen + oth + extraOrd;
+    const taxableOrd = Math.max(0, baseOrd - sd);
+    const space      = rcBracketSpace(fil, taxableOrd, targetRate);
+    const convertAmt = Math.min(space, cTrad);
+    const taxCost    = rcMarginalTax(fil, taxableOrd, convertAmt);
+    const effRate    = convertAmt>0 ? taxCost/convertAmt : 0;
+    rows.push({ age, tradBal:cTrad, rothBal:cRoth, baseOrd, taxableOrd, bracketSpace:space, convertAmt, taxCost, effRate });
+    totalConverted += convertAmt;
+    totalTax       += taxCost;
+    cTrad = Math.max(0, cTrad - convertAmt);
+    cRoth += convertAmt;
+    cTax*=(1+netRet); cTrad*=(1+netRet); cRoth*=(1+netRet);
+    noConvTrad*=(1+netRet);
+  }
+
+  /* Estimate RMD tax savings vs no-conversion scenario */
+  const yearsToRMD  = Math.max(0, 73 - windowEnd);
+  const tradAtRMD   = cTrad     * Math.pow(1+netRet, yearsToRMD);
+  const tradAtRMD_NC= noConvTrad* Math.pow(1+netRet, yearsToRMD);
+  const rmdAnnual   = tradAtRMD    / (RMD_DIV[73] || 26.5);
+  const rmdAnnual_NC= tradAtRMD_NC / (RMD_DIV[73] || 26.5);
+  const ssAt73 = (incomeState.ssBenefit && 73 >= incomeState.ssClaimAge) ? ssAdjusted(incomeState.ssClaimAge)*12 : 0;
+  const penAt73= (incomeState.pensionMonthly||0)*12;
+  const ordAt73_NC = Math.max(0, ssAt73*0.85 + penAt73 + rmdAnnual_NC - sd);
+  const ordAt73_C  = Math.max(0, ssAt73*0.85 + penAt73 + rmdAnnual   - sd);
+  const rmdTax_NC  = rcMarginalTax(fil, 0, ordAt73_NC);
+  const rmdTax_C   = rcMarginalTax(fil, 0, ordAt73_C);
+  const annualSaving  = Math.max(0, rmdTax_NC - rmdTax_C);
+  const lifetimeSaving= annualSaving * 20;
+  const netBenefit    = lifetimeSaving - totalTax;
+
+  const rc = document.getElementById('rc-summary');
+  if (rc) {
+    const col = netBenefit>0 ? 'var(--accent3)' : 'var(--danger)';
+    rc.innerHTML = `
+      <div class="metric-card"><div class="label">Conversion window</div>
+        <div class="value accent">${windowYrs} yrs</div>
+        <div class="sub">Age ${state.retireAge}–${windowEnd}</div></div>
+      <div class="metric-card"><div class="label">Total to convert</div>
+        <div class="value accent2">${fmtM(totalConverted)}</div>
+        <div class="sub">to top of ${(targetRate*100).toFixed(0)}% bracket each year</div></div>
+      <div class="metric-card"><div class="label">Tax cost now</div>
+        <div class="value" style="color:var(--danger);">${fmtM(totalTax)}</div>
+        <div class="sub">Eff. rate: ${totalConverted>0?(totalTax/totalConverted*100).toFixed(1):'0'}%</div></div>
+      <div class="metric-card"><div class="label">RMD tax savings (est.)</div>
+        <div class="value" style="color:var(--accent3);">${fmtM(lifetimeSaving)}</div>
+        <div class="sub">${fmtD(annualSaving)}/yr × 20 yrs</div></div>
+      <div class="metric-card" style="border-color:${netBenefit>0?'var(--accent3)':'var(--danger)'}33;">
+        <div class="label">Net lifetime benefit</div>
+        <div class="value" style="color:${col};">${netBenefit>=0?'+':''}${fmtM(netBenefit)}</div>
+        <div class="sub">${netBenefit>0?'Conversions look favorable':'Consider reviewing timing'}</div></div>`;
+  }
+
+  const tblEl = document.getElementById('rc-table');
+  if (!tblEl) return;
+  let tbl=`<thead><tr>
+    <th>Age</th><th style="color:var(--trad-color);">Trad Balance</th><th>Base Income</th>
+    <th style="color:var(--accent2);">Bracket Space<br><small style="font-weight:400;">(to ${(targetRate*100).toFixed(0)}% top)</small></th>
+    <th style="color:var(--accent);">Convert Amount</th>
+    <th style="color:var(--danger);">Tax Cost</th><th>Eff. Rate</th>
+    <th style="color:var(--roth-color);">Roth After</th>
+  </tr></thead><tbody>`;
+  if(rows.length===0){
+    tbl+=`<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">
+      No conversion window — SS claiming age equals retirement age. Delay SS to age 70 for up to ${70-state.retireAge} conversion years.
+    </td></tr>`;
+  } else {
+    rows.forEach(r=>{
+      tbl+=`<tr>
+        <td style="font-family:'DM Mono',monospace;font-weight:600;">${r.age}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--trad-color);">${fmtM(r.tradBal)}</td>
+        <td style="font-family:'DM Mono',monospace;">${fmtD(r.baseOrd)}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--accent2);">${fmtD(r.bracketSpace)}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:600;">${r.convertAmt>0?fmtD(r.convertAmt):'—'}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--danger);">${r.taxCost>0?fmtD(r.taxCost):'—'}</td>
+        <td style="font-family:'DM Mono',monospace;">${r.convertAmt>0?(r.effRate*100).toFixed(1)+'%':'—'}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--roth-color);">${fmtM(r.rothBal+r.convertAmt)}</td>
+      </tr>`;
+    });
+  }
+  tbl+='</tbody>';
+  tblEl.innerHTML=tbl;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   HEALTHCARE BRIDGE
+   ═══════════════════════════════════════════════════════════════════ */
+/* ACA benchmark SLCSP monthly premiums by age band — 2024 national avg per person */
+const ACA_PREM_BY_AGE = [[45,350],[50,430],[55,620],[60,780],[62,870],[64,1020],[65,0]];
+
+function acaPremAtAge(age) {
+  if (age >= 65) return 0;
+  for (let i = ACA_PREM_BY_AGE.length-1; i >= 0; i--) {
+    if (age >= ACA_PREM_BY_AGE[i][0]) return ACA_PREM_BY_AGE[i][1];
+  }
+  return ACA_PREM_BY_AGE[0][1];
+}
+
+/* ACA subsidy: cap your premium at 8.5% of MAGI (IRA rules) */
+function acaYearRow(age, magi, people) {
+  const monthlyPerPerson = acaPremAtAge(age);
+  const annualGross = monthlyPerPerson * 12 * people;
+  const yourCap     = Math.min(annualGross, magi * 0.085);
+  const subsidy     = Math.max(0, annualGross - yourCap);
+  return { annualGross, subsidy, netAnnual: annualGross - subsidy };
+}
+
+let hcState = { people: 1, magi: 60000 };
+
+function buildHealthcareBridge() {
+  const cEl = document.getElementById('hc-content');
+  if (!cEl) return;
+
+  const retAge = state.retireAge;
+  const bridgeYrs = Math.max(0, 65 - retAge);
+
+  if (bridgeYrs <= 0) {
+    cEl.innerHTML = `<div style="text-align:center;padding:48px 20px;color:var(--muted);">
+      <div style="font-size:40px;margin-bottom:12px;">✓</div>
+      <div style="font-size:16px;color:var(--text);margin-bottom:8px;">No bridge needed</div>
+      <div>Retirement age ${retAge} is ≥ 65 — Medicare coverage starts immediately.</div>
+    </div>`;
+    return;
+  }
+
+  const people = Math.max(1, +hcState.people || 1);
+  const magi   = Math.max(0, +hcState.magi   || 0);
+
+  const rows=[];
+  let totalGross=0, totalSubsidy=0, totalNet=0;
+  for(let y=0;y<bridgeYrs;y++){
+    const age=retAge+y;
+    const {annualGross, subsidy, netAnnual} = acaYearRow(age, magi, people);
+    rows.push({age, annualGross, subsidy, netAnnual});
+    totalGross+=annualGross; totalSubsidy+=subsidy; totalNet+=netAnnual;
+  }
+  const monthlyAvg = bridgeYrs>0 ? totalNet/(bridgeYrs*12) : 0;
+
+  const hcBurn  = burnState.cats.find(c=>c.name==='Healthcare');
+  const hcS1Ann = hcBurn ? hcBurn.s1*12 : 0;
+  const coversPct = hcS1Ann>0 && rows[0] ? Math.min(200, rows[0].netAnnual/hcS1Ann*100).toFixed(0) : null;
+
+  cEl.innerHTML = `
+    <div class="metrics" style="margin-bottom:20px;">
+      <div class="metric-card"><div class="label">Bridge period</div>
+        <div class="value accent">${bridgeYrs} yrs</div>
+        <div class="sub">Age ${retAge} → 65 (Medicare)</div></div>
+      <div class="metric-card"><div class="label">Total gross premiums</div>
+        <div class="value" style="color:var(--danger);">${fmtM(totalGross)}</div>
+        <div class="sub">Full ACA benchmark cost</div></div>
+      <div class="metric-card"><div class="label">ACA subsidies</div>
+        <div class="value accent3">${fmtM(totalSubsidy)}</div>
+        <div class="sub">Based on ${fmtD(magi)} MAGI</div></div>
+      <div class="metric-card"><div class="label">Net out-of-pocket</div>
+        <div class="value accent">${fmtM(totalNet)}</div>
+        <div class="sub">${fmtD(monthlyAvg)}/mo average</div></div>
+    </div>
+    ${hcS1Ann>0 ? `<div style="padding:10px 16px;background:var(--surface2);border-radius:6px;margin-bottom:20px;font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span>Burn Stage 1 healthcare budget: <strong style="color:${hcS1Ann>0?'var(--accent3)':'var(--muted)'};">${fmtD(hcS1Ann)}/yr</strong></span>
+      ${coversPct?`<span style="color:${+coversPct>100?'var(--danger)':'var(--accent)'};">ACA cost = ${coversPct}% of that budget at retirement</span>`:''}
+      <a href="#" onclick="showTab('burn');return false;" style="color:var(--accent2);font-size:11px;margin-left:auto;">→ Edit Healthcare in Burn Stages</a>
+    </div>` : ''}
+    <div class="section-title" style="margin-top:0;">Year-by-Year Premium Estimate</div>
+    <div style="overflow-x:auto;">
+    <table class="fund-table" style="min-width:500px;">
+      <thead><tr>
+        <th>Age</th><th>Year of Retirement</th>
+        <th style="color:var(--danger);">Gross Premium</th>
+        <th style="color:var(--accent3);">ACA Subsidy</th>
+        <th style="color:var(--accent);">Net Annual</th>
+        <th>Net Monthly</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map((r,i)=>`<tr>
+          <td style="font-family:'DM Mono',monospace;font-weight:600;">${r.age}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--muted);">${i+1}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--danger);">${fmtD(r.annualGross)}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--accent3);">${fmtD(r.subsidy)}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:600;">${fmtD(r.netAnnual)}</td>
+          <td style="font-family:'DM Mono',monospace;">${fmtD(r.netAnnual/12)}</td>
+        </tr>`).join('')}
+        <tr style="background:var(--surface);font-weight:700;border-top:1px solid var(--border);">
+          <td colspan="2" style="color:var(--accent);font-family:'DM Mono',monospace;">Total bridge cost</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--danger);">${fmtD(totalGross)}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--accent3);">${fmtD(totalSubsidy)}</td>
+          <td style="font-family:'DM Mono',monospace;color:var(--accent);">${fmtD(totalNet)}</td>
+          <td style="font-family:'DM Mono',monospace;">${fmtD(monthlyAvg)}/mo avg</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:16px;padding:12px 16px;background:var(--surface);border-radius:6px;line-height:1.7;">
+      ⓘ Premiums based on 2024 ACA benchmark Silver plan (SLCSP) national averages — actual costs vary by state and plan.
+      Subsidy cap at 8.5% of MAGI per IRA rules (extended through 2025). Dental/vision not included.
+      Deductibles and out-of-pocket maximums add $3K–$10K/yr in worst-case scenarios.
+      Verify at <a href="https://healthcare.gov" target="_blank" style="color:var(--accent2);">healthcare.gov</a>.
+    </div>`;
+}
+
 /* ═══ INIT ═══ */
 buildOverview();
 buildLocation();
@@ -2474,6 +3060,8 @@ buildBurn();
 updateRetirement(); /* also calls buildNetWorth() */
 buildTaxAlphaTimeline();
 buildCustomPortfolio();
+buildRothConvert();
+buildHealthcareBridge();
 </script>
 </body>
 </html>
