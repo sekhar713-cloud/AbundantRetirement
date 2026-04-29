@@ -186,8 +186,9 @@ body {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 3px;
+  transition: opacity 0.15s;
 }
-.tax-link:hover { color: var(--accent2) !important; }
+.tax-link:hover { opacity: 0.75; background: rgba(192,57,43,0.07); border-radius: 3px; }
 .tax-row-hl { background: rgba(27,58,107,0.1) !important; }
 .tax-row-fade { background: transparent !important; transition: background 1.6s ease; }
 
@@ -614,6 +615,10 @@ body {
     </div>
     <div class="subsection">
       <div class="section-title">Withdrawal projection</div>
+      <div style="display:flex;align-items:center;gap:10px;background:rgba(13,115,119,0.06);border:1px solid rgba(13,115,119,0.2);border-radius:6px;padding:10px 14px;margin-bottom:14px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0D7377" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+        <span style="font-size:12px;color:#0D7377;font-family:'DM Mono',monospace;letter-spacing:0.02em;">Click any <strong style="color:var(--danger);">Tax Paid</strong> value to load that year's income into the Tax Calc tab for a detailed federal tax breakdown.</span>
+      </div>
       <div id="retirement-bars"></div>
       <table class="nqdc-table" style="margin-top:16px;" id="retirement-table"></table>
     </div>
@@ -2497,7 +2502,7 @@ function updateRetirement(){
     ${dcpActive()?`<th style="color:var(--dcp-color);">DCP<br><small style="font-weight:400;font-size:10px;">ordinary income</small></th>`:''}
     <th style="color:#2ecc71;">SS / Pension<br><small style="font-weight:400;font-size:10px;">guaranteed</small></th>
     <th>Total Income</th>
-    <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--muted);">click → Tax Calc</small></th>
+    <th style="color:var(--danger);">Tax Paid<br><small style="font-weight:400;font-size:10px;color:var(--danger);opacity:0.75;">↗ click for detail</small></th>
     <th>After-Tax</th>
     <th style="color:var(--accent3);">Burn Need<br><small style="font-weight:400;font-size:10px;">infl-adj target</small></th>
     <th>Surplus / Deficit<br><small style="font-weight:400;font-size:10px;">after-tax vs burn</small></th>
