@@ -352,8 +352,8 @@ body {
   <!-- ═══ MY PORTFOLIO + ACCUMULATION ═══ -->
   <div id="tab-overview" class="tab-panel active">
 
-    <!-- ── Section 1: My Portfolio ─────────────────────── -->
-    <div class="section-title">My Portfolio</div>
+    <!-- ── Section 1: Starting Portfolio ─────────────────────── -->
+    <div class="section-title">Starting Portfolio</div>
 
     <!-- Mode selector -->
     <div class="pmode-bar">
@@ -390,7 +390,7 @@ body {
         <div class="alpha-card">
           <div class="input-group">
             <label>Portfolio name</label>
-            <input type="text" class="v3-input" id="cp-name" value="My Portfolio" maxlength="40"
+            <input type="text" class="v3-input" id="cp-name" value="Starting Portfolio" maxlength="40"
               oninput="customPort.name=this.value">
           </div>
           <div class="input-group" style="margin-bottom:0;">
@@ -798,7 +798,7 @@ body {
         <div class="ht-step-line"></div>
         <div class="ht-step-ncol"><div class="ht-step-num">1</div></div>
         <div class="ht-step-body">
-          <div class="ht-step-tag">My Portfolio tab</div>
+          <div class="ht-step-tag">Starting Portfolio tab</div>
           <div class="ht-step-title">Tell it what you've got</div>
           <p class="ht-step-desc">Click <strong style="color:var(--text);">Enter My Own Holdings</strong> and start adding your ETFs. Type a ticker — VOO, AVUV, BND, SCHD, whatever — and it will auto-fill the fund name, expense ratio, and category. Set the <strong style="color:var(--text);">account type</strong> for each holding (Taxable, Traditional, or Roth). Then enter your dollar balances. These numbers are the engine of everything else.</p>
           <div class="ht-aside">💡 <strong>Or pick a model portfolio.</strong> If staring at your 14-ETF spaghetti allocation feels like too much before coffee, choose the Factor Portfolio, S&amp;P Blend, or Merriman Worldwide and come back to the custom stuff later. We don't judge. Bogle wouldn't either.</div>
@@ -955,7 +955,7 @@ body {
     <div class="ht-cta">
       <h3>The clock is ticking.<br>The map is ready.</h3>
       <p>Open the portal. Enter your numbers. Return whenever anything changes. No account. No advisor. No judgment. Just the math, honestly rendered.</p>
-      <button class="ht-cta-btn" onclick="switchTab('overview')">Open My Portfolio →</button>
+      <button class="ht-cta-btn" onclick="switchTab('overview')">Open Starting Portfolio →</button>
     </div>
 
   </div>
@@ -971,7 +971,7 @@ body {
       <table class="cap-table">
         <thead><tr><th>Tab</th><th>What it answers</th><th>Key insight</th></tr></thead>
         <tbody>
-          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">My Portfolio</td><td>What is my portfolio today and how will it grow?</td><td>Choose a model portfolio or enter your own holdings — balances, return engine, and fund allocation update across every tab.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Starting Portfolio</td><td>What is my portfolio today and how will it grow?</td><td>Choose a model portfolio or enter your own holdings — balances, return engine, and fund allocation update across every tab.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Liquid Net Worth</td><td>How do my liquid assets evolve from now through age 100?</td><td>Year-by-year stacked bar chart across accumulation and retirement phases — see when you peak, and whether your portfolio survives to 100.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Location Alpha</td><td>Am I holding the right funds in the right accounts?</td><td>Tax-location arbitrage: holding bonds in tax-deferred and equities in Roth can add 0.5–1.5%/yr after-tax with zero change in risk.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Tax Alpha</td><td>How does my asset location translate to after-tax dollars over time?</td><td>A timeline of annual tax drag vs. optimized location, showing cumulative dollars saved over your accumulation window.</td></tr>
@@ -1045,7 +1045,7 @@ body {
    TABS
    ═══════════════════════════════════════════════════════════════════ */
 const tabDefs = [
-  ['overview','My Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
+  ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
   ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],['howto','How To Use'],['about','About']
 ];
@@ -1467,7 +1467,7 @@ function buildOverview() {
       ${isCustomActive ? `
         <div class="metric-card" style="border-color:var(--accent)33;">
           <div class="label">Active portfolio</div>
-          <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:3px;">${customPort.name||'My Portfolio'}</div>
+          <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:3px;">${customPort.name||'Starting Portfolio'}</div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${customPort.holdings.length} ETF${customPort.holdings.length!==1?'s':''} · ${(engineMeta['custom'].ret*100).toFixed(1)}% est. return</div>
           <button onclick="setPortfolioMode('custom')" style="font-size:10px;padding:4px 10px;background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif;">Edit holdings →</button>
         </div>` : ''}
@@ -2733,10 +2733,10 @@ const catEstRet = {
 
 /* Pre-populate fundSets / engineMeta so setReturnEngine('custom') never fails */
 fundSets['custom'] = [];
-engineMeta['custom'] = {label:'My Portfolio', ret:0.085, desc:'Custom holdings'};
+engineMeta['custom'] = {label:'Starting Portfolio', ret:0.085, desc:'Custom holdings'};
 
 const customPort = {
-  name: 'My Portfolio',
+  name: 'Starting Portfolio',
   holdings: [],
   manualRet: null,
   _nextId: 0,
@@ -2927,14 +2927,14 @@ function cpRefreshEngineBtn() {
     btn.onclick = () => { if (fundSets['custom'].length) setReturnEngine('custom'); else { showTab('overview'); setPortfolioMode('custom'); } };
     toggle.appendChild(btn);
   }
-  btn.textContent = customPort.name || 'My Portfolio';
+  btn.textContent = customPort.name || 'Starting Portfolio';
   /* Also add/update option in retirement select */
   const sel = document.getElementById('rEngine');
   if (sel) {
     let opt = sel.querySelector('option[value="custom"]');
     if (!opt) { opt = document.createElement('option'); opt.value = 'custom'; sel.appendChild(opt); }
     const ret = engineMeta['custom'] ? (engineMeta['custom'].ret*100).toFixed(1) : '';
-    opt.textContent = `${customPort.name||'My Portfolio'}${ret?' ('+ret+'%)':''}`;
+    opt.textContent = `${customPort.name||'Starting Portfolio'}${ret?' ('+ret+'%)':''}`;
   }
 }
 
@@ -2973,7 +2973,7 @@ function cpActivate() {
   const ret = customPort.manualRet !== null ? customPort.manualRet : stats.weightedRet;
   fundSets['custom']   = cpBuildFundSet();
   engineMeta['custom'] = {
-    label: `${customPort.name||'My Portfolio'} (${(ret*100).toFixed(1)}%)`,
+    label: `${customPort.name||'Starting Portfolio'} (${(ret*100).toFixed(1)}%)`,
     ret,
     desc: `${customPort.holdings.length} ETF${customPort.holdings.length!==1?'s':''} · blended ER ${stats.blendedER.toFixed(2)}%`,
   };
