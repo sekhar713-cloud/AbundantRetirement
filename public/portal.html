@@ -1226,20 +1226,53 @@ function resizeAdditions() {
 /* ═══════════════════════════════════════════════════════════════════
    V2 — DCP (DEFERRED COMPENSATION PLAN)
    ═══════════════════════════════════════════════════════════════════ */
-const dcpFunds = [
-  { name:'Vanguard Institutional 500 Index',    ticker:'VIIIX',  cat:'US Large Cap',        ret:0.078, value:0, alloc:0 },
-  { name:'Vanguard Total Stock Market Index',   ticker:'VITSX',  cat:'US Total Market',     ret:0.080, value:0, alloc:0 },
-  { name:'Vanguard Mid-Cap Index',              ticker:'VMCIX',  cat:'US Mid Cap',          ret:0.085, value:0, alloc:0 },
-  { name:'Vanguard Small-Cap Index',            ticker:'VSMAX',  cat:'US Small Cap',        ret:0.090, value:0, alloc:0 },
-  { name:'Vanguard Total Intl Stock Index',     ticker:'VTIAX',  cat:'International',       ret:0.070, value:0, alloc:0 },
-  { name:'Vanguard Developed Markets Index',    ticker:'VTMGX',  cat:'Intl Developed',      ret:0.065, value:0, alloc:0 },
-  { name:'Vanguard Emerging Markets Stock Idx', ticker:'VEMAX',  cat:'Emerging Markets',    ret:0.075, value:0, alloc:0 },
-  { name:'Vanguard Real Estate Index',          ticker:'VGSLX',  cat:'US REIT',             ret:0.065, value:0, alloc:0 },
-  { name:'Vanguard Total Bond Market Index',    ticker:'VBTLX',  cat:'US Bonds',            ret:0.045, value:0, alloc:0 },
-  { name:'Vanguard Short-Term Bond Index',      ticker:'VBIRX',  cat:'Short-Term Bond',     ret:0.040, value:0, alloc:0 },
-  { name:'Vanguard Inflation-Protected (TIPS)', ticker:'VIPSX',  cat:'Inflation-Protected', ret:0.035, value:0, alloc:0 },
-  { name:'Stable Value Fund',                   ticker:'STABLE', cat:'Stable Value',        ret:0.025, value:0, alloc:0 },
-];
+/* Rate/metadata lookup — used ONLY to enrich imported DCP rows, never forced-matched */
+const DCP_RATE_LOOKUP = {
+  VIIIX:  { cat:'US Large Cap',        ret:0.078 },
+  VINIX:  { cat:'US Large Cap',        ret:0.078 },
+  VFIAX:  { cat:'US Large Cap',        ret:0.078 },
+  VITSX:  { cat:'US Total Market',     ret:0.080 },
+  VTSAX:  { cat:'US Total Market',     ret:0.080 },
+  VMCIX:  { cat:'US Mid Cap',          ret:0.085 },
+  VMCAX:  { cat:'US Mid Cap',          ret:0.085 },
+  VSMAX:  { cat:'US Small Cap',        ret:0.090 },
+  VSCIX:  { cat:'US Small Cap',        ret:0.090 },
+  VTIAX:  { cat:'International',       ret:0.070 },
+  VTPSX:  { cat:'International',       ret:0.070 },
+  VTMGX:  { cat:'Intl Developed',      ret:0.065 },
+  VEMAX:  { cat:'Emerging Markets',    ret:0.075 },
+  VEMIX:  { cat:'Emerging Markets',    ret:0.075 },
+  VGSLX:  { cat:'US REIT',             ret:0.065 },
+  VBTLX:  { cat:'US Bonds',            ret:0.045 },
+  VBMPX:  { cat:'US Bonds',            ret:0.045 },
+  VBIRX:  { cat:'Short-Term Bond',     ret:0.040 },
+  VIPSX:  { cat:'Inflation-Protected', ret:0.035 },
+  VAIPX:  { cat:'Inflation-Protected', ret:0.035 },
+  STABLE: { cat:'Stable Value',        ret:0.025 },
+  FXAIX:  { cat:'US Large Cap',        ret:0.078 },
+  FSKAX:  { cat:'US Total Market',     ret:0.080 },
+  FSMDX:  { cat:'US Mid Cap',          ret:0.085 },
+  FSSNX:  { cat:'US Small Cap',        ret:0.090 },
+  FSPSX:  { cat:'International',       ret:0.070 },
+  SWPPX:  { cat:'US Large Cap',        ret:0.078 },
+  SWTSX:  { cat:'US Total Market',     ret:0.080 },
+};
+
+/* Guess return from name when ticker has no lookup entry */
+function dcpGuessRet(name) {
+  const n = (name||'').toLowerCase();
+  if (/stable|money.?market|cash/.test(n))          return { cat:'Stable Value',     ret:0.025 };
+  if (/bond|fixed|income|treasury|tips/.test(n))    return { cat:'US Bonds',         ret:0.045 };
+  if (/intl|international|global|world|emerg/.test(n)) return { cat:'International', ret:0.070 };
+  if (/reit|real.?estate/.test(n))                  return { cat:'US REIT',          ret:0.065 };
+  if (/small/.test(n))                              return { cat:'US Small Cap',      ret:0.090 };
+  if (/mid/.test(n))                                return { cat:'US Mid Cap',        ret:0.085 };
+  if (/target|retire|freedom|lifecycle/.test(n))    return { cat:'Target Date',       ret:0.068 };
+  return { cat:'US Large Blend', ret:0.078 };
+}
+
+/* dcpFunds is dynamic — replaced entirely when portfolio is imported */
+let dcpFunds = [];
 const dcpState = {
   annualContrib:   0,    // pre-retirement contribution per year
   payoutYears:     10,   // 1=lump sum, 3–13=installments (1/N, 1/(N-1), … pattern)
@@ -2696,7 +2729,7 @@ function exportData() {
       target: parseNum(document.getElementById('tcTargetNum').value),
     },
     dcp: {
-      funds: dcpFunds.map(f => ({ ticker: f.ticker, value: f.value || 0, alloc: f.alloc || 0 })),
+      funds: dcpFunds.map(f => ({ name: f.name, ticker: f.ticker, cat: f.cat, ret: f.ret, value: f.value || 0, alloc: f.alloc || 0 })),
       state: { annualContrib: dcpState.annualContrib, payoutYears: dcpState.payoutYears, payoutStartAge: dcpState.payoutStartAge },
     },
   };
@@ -2763,10 +2796,18 @@ function importData(file) {
         if (d.taxcalc.target != null) tcSet('tcTarget', d.taxcalc.target);
       }
       if (d.dcp) {
-        if (Array.isArray(d.dcp.funds)) {
-          d.dcp.funds.forEach(saved => {
-            const f = dcpFunds.find(x => x.ticker === saved.ticker);
-            if (f) { f.value = saved.value || 0; if (saved.alloc != null) f.alloc = saved.alloc; }
+        if (Array.isArray(d.dcp.funds) && d.dcp.funds.length > 0) {
+          /* Restore exact funds from export — no matching against predefined list */
+          dcpFunds = d.dcp.funds.map(saved => {
+            const meta = dcpEnrichRow(saved.ticker, saved.name);
+            return {
+              name:   saved.name   || saved.ticker || 'Unknown Fund',
+              ticker: saved.ticker || '',
+              cat:    saved.cat    || meta.cat,
+              ret:    saved.ret    != null ? saved.ret : meta.ret,
+              value:  saved.value  || 0,
+              alloc:  saved.alloc  != null ? saved.alloc : 0,
+            };
           });
         }
         if (d.dcp.state) {
@@ -4011,22 +4052,10 @@ function isDcpLocation(loc, broker) {
   return /\bdcp\b|deferred.?comp|nqdc/.test(s);
 }
 
-/* Best-effort: match a DCP row (by ticker or fund name) to a dcpFunds entry */
-function matchDcpFund(ticker, name) {
-  if (ticker) {
-    const byTicker = dcpFunds.find(f => f.ticker.toUpperCase() === ticker.toUpperCase());
-    if (byTicker) return byTicker;
-  }
-  if (name) {
-    const nm = name.toLowerCase();
-    const byName = dcpFunds.find(f => {
-      const fn = f.name.toLowerCase();
-      /* Check if the key words overlap */
-      return fn.split(' ').filter(w => w.length > 3).some(w => nm.includes(w));
-    });
-    if (byName) return byName;
-  }
-  return null;
+/* Enrich an imported DCP row with return rate + category from lookup table */
+function dcpEnrichRow(ticker, name) {
+  const key = (ticker||'').toUpperCase();
+  return DCP_RATE_LOOKUP[key] || dcpGuessRet(name);
 }
 
 function loadSheetJS(cb) {
@@ -4225,12 +4254,14 @@ function renderXlsxPreview(parsed, skipped, fname) {
   const dcpTotal = xlsxDcpRows.reduce((s,r) => s+r.value, 0);
   let dcpRows = '';
   xlsxDcpRows.forEach(r => {
-    const matched = matchDcpFund(r.ticker, r.name);
+    const meta = dcpEnrichRow(r.ticker, r.name);
+    const pct  = dcpTotal > 0 ? (r.value / dcpTotal * 100).toFixed(1) + '%' : '—';
     dcpRows += `<tr>
       <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);font-weight:600;">${escHtml(r.ticker)||'—'}</td>
       <td style="font-size:12px;">${escHtml(r.name)}</td>
       <td style="font-family:'DM Mono',monospace;">${fmtD(r.value)}</td>
-      <td style="font-size:12px;color:${matched?'var(--accent3)':'var(--muted)'};">${matched ? '✓ '+escHtml(matched.name) : 'unmatched'}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);">${pct}</td>
+      <td style="font-size:11px;color:var(--muted);">${meta.cat} · ${(meta.ret*100).toFixed(1)}% est.</td>
     </tr>`;
   });
 
@@ -4240,7 +4271,7 @@ function renderXlsxPreview(parsed, skipped, fname) {
         DCP / NQDC Detected — ${xlsxDcpRows.length} fund${xlsxDcpRows.length!==1?'s':''} · ${fmtD(dcpTotal)} total
       </div>
       <table class="fund-table" style="margin-bottom:14px;">
-        <thead><tr><th>Ticker</th><th>Fund Name</th><th>Balance</th><th>Maps to</th></tr></thead>
+        <thead><tr><th>Ticker</th><th>Fund Name</th><th>Balance</th><th>Alloc %</th><th>Category · Est. Return</th></tr></thead>
         <tbody>${dcpRows}</tbody>
       </table>
       <div style="max-width:320px;">
@@ -4274,25 +4305,18 @@ function applyXlsxImport() {
     const contribInp = document.getElementById('xlsx-dcp-annual-contrib');
     if (contribInp && contribInp.value) dcpState.annualContrib = +contribInp.value;
 
-    /* Reset existing DCP fund balances, then apply matched rows */
-    dcpFunds.forEach(f => { f.value = 0; f.alloc = 0; });
-    xlsxDcpRows.forEach(r => {
-      const matched = matchDcpFund(r.ticker, r.name);
-      if (matched) {
-        matched.value += r.value;
-      } else {
-        /* Unmatched: add to Vanguard Institutional 500 as a catch-all */
-        dcpFunds[0].value += r.value;
-      }
+    /* Replace dcpFunds entirely with exactly what was uploaded — no matching, no merging */
+    const importTotal = xlsxDcpRows.reduce((s, r) => s + r.value, 0);
+    dcpFunds = xlsxDcpRows.map(r => {
+      const meta = dcpEnrichRow(r.ticker, r.name);
+      const alloc = importTotal > 0 ? +(r.value / importTotal * 100).toFixed(2) : 0;
+      return { name: r.name || r.ticker || 'Unknown Fund', ticker: r.ticker || '', cat: meta.cat, ret: meta.ret, value: r.value, alloc };
     });
 
-    /* Set alloc% = same proportions as imported balances so new contributions follow same split */
-    const dcpImportTotal = dcpTotal();
-    if (dcpImportTotal > 0) {
-      dcpFunds.forEach(f => { f.alloc = +(f.value / dcpImportTotal * 100).toFixed(2); });
-      /* Normalize rounding errors so alloc sums to exactly 100 */
-      const largest = dcpFunds.reduce((a, b) => a.alloc > b.alloc ? a : b);
-      largest.alloc = +(largest.alloc + (100 - dcpAllocTotal())).toFixed(2);
+    /* Normalize alloc rounding so it sums to exactly 100 */
+    if (dcpFunds.length > 0) {
+      const diff = +(100 - dcpFunds.reduce((s, f) => s + f.alloc, 0)).toFixed(2);
+      if (diff !== 0) dcpFunds[0].alloc = +(dcpFunds[0].alloc + diff).toFixed(2);
     }
 
     buildDcpSection();
