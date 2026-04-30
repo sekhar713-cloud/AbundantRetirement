@@ -1200,17 +1200,18 @@ function resizeAdditions() {
    V2 — DCP (DEFERRED COMPENSATION PLAN)
    ═══════════════════════════════════════════════════════════════════ */
 const dcpFunds = [
-  { name:'Vanguard Institutional 500 Index',    ticker:'VIIIX',  cat:'US Large Cap',        ret:0.078, value:0 },
-  { name:'Vanguard Total Stock Market Index',   ticker:'VITSX',  cat:'US Total Market',     ret:0.080, value:0 },
-  { name:'Vanguard Small-Cap Index',            ticker:'VSMAX',  cat:'US Small Cap',        ret:0.090, value:0 },
-  { name:'Vanguard Total Intl Stock Index',     ticker:'VTIAX',  cat:'International',       ret:0.070, value:0 },
-  { name:'Vanguard Developed Markets Index',    ticker:'VTMGX',  cat:'Intl Developed',      ret:0.065, value:0 },
-  { name:'Vanguard Emerging Markets Stock Idx', ticker:'VEMAX',  cat:'Emerging Markets',    ret:0.075, value:0 },
-  { name:'Vanguard Real Estate Index',          ticker:'VGSLX',  cat:'US REIT',             ret:0.065, value:0 },
-  { name:'Vanguard Total Bond Market Index',    ticker:'VBTLX',  cat:'US Bonds',            ret:0.045, value:0 },
-  { name:'Vanguard Short-Term Bond Index',      ticker:'VBIRX',  cat:'Short-Term Bond',     ret:0.040, value:0 },
-  { name:'Vanguard Inflation-Protected (TIPS)', ticker:'VIPSX',  cat:'Inflation-Protected', ret:0.035, value:0 },
-  { name:'Stable Value Fund',                   ticker:'STABLE', cat:'Stable Value',        ret:0.025, value:0 },
+  { name:'Vanguard Institutional 500 Index',    ticker:'VIIIX',  cat:'US Large Cap',        ret:0.078, value:0, alloc:0 },
+  { name:'Vanguard Total Stock Market Index',   ticker:'VITSX',  cat:'US Total Market',     ret:0.080, value:0, alloc:0 },
+  { name:'Vanguard Mid-Cap Index',              ticker:'VMCIX',  cat:'US Mid Cap',          ret:0.085, value:0, alloc:0 },
+  { name:'Vanguard Small-Cap Index',            ticker:'VSMAX',  cat:'US Small Cap',        ret:0.090, value:0, alloc:0 },
+  { name:'Vanguard Total Intl Stock Index',     ticker:'VTIAX',  cat:'International',       ret:0.070, value:0, alloc:0 },
+  { name:'Vanguard Developed Markets Index',    ticker:'VTMGX',  cat:'Intl Developed',      ret:0.065, value:0, alloc:0 },
+  { name:'Vanguard Emerging Markets Stock Idx', ticker:'VEMAX',  cat:'Emerging Markets',    ret:0.075, value:0, alloc:0 },
+  { name:'Vanguard Real Estate Index',          ticker:'VGSLX',  cat:'US REIT',             ret:0.065, value:0, alloc:0 },
+  { name:'Vanguard Total Bond Market Index',    ticker:'VBTLX',  cat:'US Bonds',            ret:0.045, value:0, alloc:0 },
+  { name:'Vanguard Short-Term Bond Index',      ticker:'VBIRX',  cat:'Short-Term Bond',     ret:0.040, value:0, alloc:0 },
+  { name:'Vanguard Inflation-Protected (TIPS)', ticker:'VIPSX',  cat:'Inflation-Protected', ret:0.035, value:0, alloc:0 },
+  { name:'Stable Value Fund',                   ticker:'STABLE', cat:'Stable Value',        ret:0.025, value:0, alloc:0 },
 ];
 const dcpState = {
   annualContrib:   0,    // pre-retirement contribution per year
@@ -1219,11 +1220,23 @@ const dcpState = {
 };
 
 function dcpTotal()      { return dcpFunds.reduce((s,f) => s+(f.value||0), 0); }
+function dcpAllocTotal() { return dcpFunds.reduce((s,f) => s+(f.alloc||0), 0); }
+
+/* Return rate on the EXISTING balance (weighted by current balances) */
 function dcpReturnRate() {
   const tot = dcpTotal();
   if (tot === 0) return 0.06;
   return dcpFunds.reduce((s,f) => s+(f.value||0)*f.ret, 0) / tot;
 }
+
+/* Return rate on NEW CONTRIBUTIONS (weighted by allocation percentages).
+   Falls back to balance-weighted rate if no allocation is set.           */
+function dcpContribReturnRate() {
+  const tot = dcpAllocTotal();
+  if (tot === 0) return dcpReturnRate();
+  return dcpFunds.reduce((s,f) => s+(f.alloc||0)/100*f.ret, 0);
+}
+
 function dcpActive() { return dcpTotal() > 0 || dcpState.annualContrib > 0; }
 function dcpPayoutStartAge() { return dcpState.payoutStartAge || state.retireAge; }
 
@@ -1274,13 +1287,20 @@ function buildDcpSection() {
       </div>
     </div>
 
-    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:10px;">DCP Fund Allocation</div>
-    <table class="fund-table" style="margin-bottom:16px;">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;">DCP Fund Allocation</div>
+      <button class="v3-btn-sm" onclick="dcpEqualWeight()" title="Distribute 100% equally across all funds"
+        style="font-size:11px;padding:3px 10px;background:transparent;border:1px solid var(--dcp-color);color:var(--dcp-color);border-radius:4px;cursor:pointer;">
+        ⚖ Equal weight
+      </button>
+    </div>
+    <table class="fund-table" style="margin-bottom:8px;">
       <thead><tr>
         <th>Fund</th><th>Ticker</th><th>Category</th>
         <th style="color:var(--muted);">Est. Return</th>
         <th style="color:var(--dcp-color);">Your Balance ($)</th>
-        <th>Weight</th>
+        <th>Bal. Weight</th>
+        <th style="color:var(--accent3);">Contrib Alloc %</th>
       </tr></thead>
       <tbody>
         ${dcpFunds.map((f,i) => {
@@ -1295,6 +1315,10 @@ function buildDcpSection() {
               oninput="dcpFunds[${i}].value=+this.value||0;dcpRefreshSummary();updateRetirement();"
               onkeydown="if(event.key==='Enter')this.blur()"></td>
             <td style="font-family:'DM Mono',monospace;color:${wt>0?'var(--dcp-color)':'var(--muted)'};">${wt>0?wt.toFixed(1)+'%':'—'}</td>
+            <td><input type="number" class="v3-input dcp-alloc-input" value="${f.alloc||''}" placeholder="0"
+              min="0" max="100" step="5" style="width:80px;text-align:right;"
+              oninput="dcpFunds[${i}].alloc=+this.value||0;dcpRefreshSummary();updateRetirement();"
+              onkeydown="if(event.key==='Enter')this.blur()"></td>
           </tr>`;
         }).join('')}
       </tbody>
@@ -1304,9 +1328,11 @@ function buildDcpSection() {
           <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);" id="dcp-blend-ret">${(blendRet*100).toFixed(1)}% blended</td>
           <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);font-size:16px;" id="dcp-total-cell">${fmtD(total)}</td>
           <td></td>
+          <td style="font-family:'DM Mono',monospace;font-size:13px;" id="dcp-alloc-total-cell">—</td>
         </tr>
       </tfoot>
     </table>
+    <div id="dcp-alloc-bar" style="margin-bottom:16px;"></div>
 
     <div id="dcp-payout-preview"></div>`;
 
@@ -1324,15 +1350,54 @@ function dcpRefreshSummary() {
   totalEl.textContent = fmtD(total);
   if (blendEl) blendEl.textContent = (ret*100).toFixed(1)+'% blended';
 
-  /* Weight column update */
+  /* Weight + alloc column update */
+  const allocTot = dcpAllocTotal();
+  const cRet = dcpContribReturnRate();
   dcpFunds.forEach((f,i) => {
     const wt = total > 0 ? f.value/total*100 : 0;
-    const cells = document.querySelectorAll('#dcp-section-content table tbody tr');
-    if (cells[i]) {
-      const wtCell = cells[i].cells[5];
+    const rows = document.querySelectorAll('#dcp-section-content table tbody tr');
+    if (rows[i]) {
+      const wtCell = rows[i].cells[5];
       if (wtCell) { wtCell.textContent = wt>0?wt.toFixed(1)+'%':'—'; wtCell.style.color = wt>0?'var(--dcp-color)':'var(--muted)'; }
     }
   });
+
+  /* Alloc total footer cell */
+  const allocTotEl = document.getElementById('dcp-alloc-total-cell');
+  if (allocTotEl) {
+    if (allocTot === 0) {
+      allocTotEl.textContent = '—';
+      allocTotEl.style.color = 'var(--muted)';
+      allocTotEl.title = 'No contribution allocation set — using balance weights';
+    } else {
+      const ok = Math.abs(allocTot - 100) < 0.01;
+      allocTotEl.textContent = allocTot.toFixed(0) + '%' + (ok ? ' ✓' : ' ✗');
+      allocTotEl.style.color = ok ? 'var(--accent3)' : 'var(--danger)';
+      allocTotEl.title = ok
+        ? `Contrib return: ${(cRet*100).toFixed(2)}% blended`
+        : `Must sum to 100% (currently ${allocTot.toFixed(0)}%)`;
+    }
+  }
+
+  /* Allocation bar */
+  const barEl = document.getElementById('dcp-alloc-bar');
+  if (barEl) {
+    if (allocTot === 0) {
+      barEl.innerHTML = '';
+    } else {
+      const ok = Math.abs(allocTot - 100) < 0.01;
+      const segments = dcpFunds.filter(f => f.alloc > 0).map((f,_,arr) => {
+        const pct = (f.alloc / Math.max(allocTot, 1) * 100).toFixed(2);
+        return `<div title="${f.name}: ${f.alloc}%" style="flex:${pct};background:var(--dcp-color);opacity:${0.4+0.6*f.alloc/100};height:8px;border-radius:2px;margin-right:1px;"></div>`;
+      }).join('');
+      barEl.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="flex:1;display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--border);">${segments}</div>
+          <div style="font-size:11px;font-family:'DM Mono',monospace;color:${ok?'var(--accent3)':'var(--danger)'};">${(cRet*100).toFixed(2)}% contrib CAGR</div>
+        </div>
+        ${!ok?`<div style="font-size:11px;color:var(--danger);margin-top:2px;">⚠ Allocation sums to ${allocTot.toFixed(0)}% — must equal 100% to use these weights</div>`:''}`;
+    }
+  }
 
   if (!prevEl || !dcpActive()) { if (prevEl) prevEl.innerHTML=''; return; }
 
@@ -1376,6 +1441,19 @@ function dcpRefreshSummary() {
     <div class="label" style="color:var(--dcp-color);">DCP at retirement</div>
     <div style="font-size:22px;font-weight:600;color:var(--dcp-color);">${fmtM(bal)}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(ret*100).toFixed(1)}% blended · ${N}-yr payout</div>`;
+}
+
+function dcpEqualWeight() {
+  const n = dcpFunds.length;
+  const each = Math.round(100 / n);
+  dcpFunds.forEach((f, i) => { f.alloc = (i === n-1) ? 100 - each*(n-1) : each; });
+  /* sync inputs */
+  document.querySelectorAll('#dcp-section-content table tbody tr').forEach((row, i) => {
+    const inp = row.querySelector('.dcp-alloc-input');
+    if (inp) inp.value = dcpFunds[i] ? (dcpFunds[i].alloc || '') : '';
+  });
+  dcpRefreshSummary();
+  updateRetirement();
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1646,10 +1724,13 @@ function refreshSummaryMetrics() {
     pTax *= (1+nr); pTrad *= (1+nr); pRoth *= (1+nr);
   }
   let pDCP = dcpActive() ? dcpTotal() : 0;
-  const dcpRet = dcpReturnRate();
+  let pDCPc = 0;
+  const dcpRet  = dcpReturnRate();
+  const dcpCRet = dcpContribReturnRate();
   for (let y = 0; y < accumYr; y++) {
-    if (dcpActive()) pDCP = (pDCP + dcpState.annualContrib) * (1 + dcpRet);
+    if (dcpActive()) { pDCP *= (1 + dcpRet); pDCPc = (pDCPc + dcpState.annualContrib) * (1 + dcpCRet); }
   }
+  if (dcpActive()) pDCP += pDCPc;
   const projRetire = pTax + pTrad + pRoth + pDCP;
   const nYr = state.additions.length;
 
@@ -2337,9 +2418,12 @@ function updateRetirement(){
   let balRoth = state.roth;
   const accumYears = Math.max(0, state.retireAge - state.currentAge);
 
-  /* DCP accumulates separately at its own blended return */
+  /* DCP accumulates separately — existing balance at balance-weighted rate,
+     new contributions at allocation-weighted rate                           */
   let balDCP = dcpActive() ? dcpTotal() : 0;
-  const dcpRet = dcpReturnRate();
+  let balDCPc = 0;
+  const dcpRet  = dcpReturnRate();
+  const dcpCRet = dcpContribReturnRate();
 
   for (let y = 0; y < accumYears; y++) {
     if (y < state.additions.length) {
@@ -2349,8 +2433,9 @@ function updateRetirement(){
     }
     balTax  *= (1 + netRet); balTrad *= (1 + netRet);
     balRoth *= (1 + netRet);
-    if (dcpActive()) balDCP = (balDCP + dcpState.annualContrib) * (1 + dcpRet);
+    if (dcpActive()) { balDCP *= (1 + dcpRet); balDCPc = (balDCPc + dcpState.annualContrib) * (1 + dcpCRet); }
   }
+  if (dcpActive()) balDCP += balDCPc;
   const retirePortfolio = balTax + balTrad + balRoth;
 
   /* Update hero with retirement-date balance */
@@ -2614,7 +2699,7 @@ function exportData() {
       target: parseNum(document.getElementById('tcTargetNum').value),
     },
     dcp: {
-      funds: dcpFunds.map(f => ({ ticker: f.ticker, value: f.value || 0 })),
+      funds: dcpFunds.map(f => ({ ticker: f.ticker, value: f.value || 0, alloc: f.alloc || 0 })),
       state: { annualContrib: dcpState.annualContrib, payoutYears: dcpState.payoutYears, payoutStartAge: dcpState.payoutStartAge },
     },
   };
@@ -2684,7 +2769,7 @@ function importData(file) {
         if (Array.isArray(d.dcp.funds)) {
           d.dcp.funds.forEach(saved => {
             const f = dcpFunds.find(x => x.ticker === saved.ticker);
-            if (f) f.value = saved.value || 0;
+            if (f) { f.value = saved.value || 0; if (saved.alloc != null) f.alloc = saved.alloc; }
           });
         }
         if (d.dcp.state) {
@@ -3321,19 +3406,21 @@ function buildNetWorth() {
   const accum = [];
   let bTax=state.taxable, bTrad=state.traditional, bRoth=state.roth;
   let bDCPnw = dcpActive() ? dcpTotal() : 0;
-  const dcpRet = dcpReturnRate();
+  let bDCPnwc = 0;
+  const dcpRet  = dcpReturnRate();
+  const dcpCRet = dcpContribReturnRate();
   for (let y = 0; y <= accumYrs; y++) {
-    accum.push({ age:state.currentAge+y, tax:bTax, trad:bTrad, roth:bRoth, dcp:bDCPnw, phase:'accum' });
+    accum.push({ age:state.currentAge+y, tax:bTax, trad:bTrad, roth:bRoth, dcp:bDCPnw+bDCPnwc, phase:'accum' });
     if (y < accumYrs) {
       if (y < state.additions.length) { const a=state.additions[y]; bTax+=a.taxable; bTrad+=a.traditional; bRoth+=a.roth; }
       bTax*=(1+netRet); bTrad*=(1+netRet); bRoth*=(1+netRet);
-      if (dcpActive()) bDCPnw = (bDCPnw + dcpState.annualContrib) * (1+dcpRet);
+      if (dcpActive()) { bDCPnw *= (1+dcpRet); bDCPnwc = (bDCPnwc + dcpState.annualContrib) * (1+dcpCRet); }
     }
   }
 
   /* Retirement phase — burn-driven draws + DCP payout */
   let dcpNWLeft = dcpActive() ? dcpState.payoutYears : 0;
-  let dcpNWBal  = bDCPnw;
+  let dcpNWBal  = bDCPnw + bDCPnwc;
   const retire = [];
   for (let y = 1; y <= horizon; y++) {
     const age = state.retireAge + y - 1;
