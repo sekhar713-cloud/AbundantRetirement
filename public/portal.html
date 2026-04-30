@@ -1157,20 +1157,14 @@ function jumpToTaxCalc(tradIncome, divIncome, afterTaxTarget) {
 const state = {
   taxable:     1500000,
   traditional:  400000,
-  roth:         100000,
-  currentAge:  45,
-  retireAge:   55,
+  roth:               0,
+  currentAge:        46,
+  retireAge:         50,
   additions: [
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
-    {taxable:200000, traditional:23000, roth:7000},
+    {taxable:200000, traditional:23000, roth:0},
+    {taxable:200000, traditional:23000, roth:0},
+    {taxable:200000, traditional:23000, roth:0},
+    {taxable:200000, traditional:23000, roth:0},
   ],
 };
 
@@ -1527,14 +1521,10 @@ function buildOverview() {
             onkeydown="if(event.key==='Enter')this.blur()">
         </div>`).join('');
 
+  const grandTotal = stateBase() + (dcpActive() ? dcpTotal() : 0);
   document.getElementById('portfolio-inputs').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:8px;">
       ${acctCards}
-      <div class="metric-card">
-        <div class="label">Total starting</div>
-        <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(stateBase() + (dcpActive() ? dcpTotal() : 0))}</div>
-        ${dcpActive() ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">incl. DCP ${fmtM(dcpTotal())}</div>` : ''}
-      </div>
       ${dcpActive() ? `
         <div class="metric-card" style="border-color:var(--dcp-color)33;">
           <div class="label" style="color:var(--dcp-color);display:flex;align-items:center;justify-content:space-between;">
@@ -1551,6 +1541,11 @@ function buildOverview() {
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${customPort.holdings.length} holding${customPort.holdings.length!==1?'s':''} · ${(engineMeta['custom'].ret*100).toFixed(1)}% est. return</div>
           <button onclick="setPortfolioMode('custom')" style="font-size:10px;padding:4px 10px;background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif;">Edit holdings →</button>
         </div>` : ''}
+      <div class="metric-card" style="border-color:var(--accent3)33;">
+        <div class="label">Total starting</div>
+        <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(grandTotal)}</div>
+        ${dcpActive() ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">incl. DCP ${fmtM(dcpTotal())}</div>` : ''}
+      </div>
     </div>
     <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
       <div class="metric-card" style="flex:0 0 160px;">
@@ -1723,7 +1718,7 @@ function updateAddition(yr, key, val) {
 }
 
 function onPortfolioChange() {
-  document.getElementById('p-total').textContent = fmtM(stateBase());
+  document.getElementById('p-total').textContent = fmtM(stateBase() + (dcpActive() ? dcpTotal() : 0));
   /* Age display */
   const ay=document.getElementById('p-accumYears');
   if(ay){ const yrs=state.retireAge-state.currentAge; ay.textContent=yrs+' yrs'; ay.nextElementSibling.textContent=`Ages ${state.currentAge}–${state.retireAge-1} · then SAFEMAX withdrawals`; }
