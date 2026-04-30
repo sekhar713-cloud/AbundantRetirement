@@ -250,7 +250,7 @@ body {
 .cp-input:focus { border-color:var(--accent); }
 .cp-input.cp-ticker { text-transform:uppercase; color:var(--accent); font-weight:600; }
 .cp-badge { font-size:9px; color:var(--accent3); font-family:'DM Mono',monospace; margin-left:4px; vertical-align:middle; }
-.cp-unknown { font-size:9px; color:var(--danger); font-family:'DM Mono',monospace; margin-left:4px; vertical-align:middle; }
+.cp-unknown { font-size:9px; color:var(--muted); font-family:'DM Mono',monospace; margin-left:4px; vertical-align:middle; opacity:0.75; }
 .cp-stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px 16px; }
 .cp-stat-item .cp-stat-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.07em; font-family:'DM Mono',monospace; margin-bottom:2px; }
 .cp-stat-item .cp-stat-val { font-family:'DM Mono',monospace; font-weight:600; font-size:14px; }
@@ -595,7 +595,7 @@ body {
 
   <!-- ═══ RICHER RETIREMENT (V3 — Bengen) ═══ -->
   <div id="tab-retirement" class="tab-panel">
-    <div class="section-title">Richer Retirement — Bengen SAFEMAX</div>
+    <div class="section-title">Financial Runway — Bengen SAFEMAX</div>
     <div class="safemax-hero">
       <div style="font-size:11px;color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:0.08em;font-family:'DM Mono',monospace;">Historical Safe Withdrawal Ceiling</div>
       <div class="safemax-num" id="safemax-display">4.80%</div>
@@ -709,7 +709,7 @@ body {
     </div>
     <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap;">
       <button class="action-btn" onclick="buildMonteCarlo()" style="padding:9px 22px;font-size:13px;">▶ Run 1,000 Simulations</button>
-      <span style="font-size:12px;color:var(--muted);">Uses CAPE/horizon/income from Retirement tab · draws your actual Burn Stage amounts each year.</span>
+      <span style="font-size:12px;color:var(--muted);">Uses CAPE/horizon/income from Financial Runway tab · draws your actual Burn Stage amounts each year.</span>
     </div>
     <div class="metrics" id="mc-metrics" style="margin-bottom:20px;"></div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:20px;">
@@ -898,7 +898,7 @@ body {
         <div class="ht-step-line"></div>
         <div class="ht-step-ncol"><div class="ht-step-num">5</div></div>
         <div class="ht-step-body">
-          <div class="ht-step-tag">Retirement tab</div>
+          <div class="ht-step-tag">Financial Runway tab</div>
           <div class="ht-step-title">Dial in your withdrawal parameters</div>
           <p class="ht-step-desc">Set your retirement age, horizon (up to 60 years — FIRE Portal was built knowing that retiring at 48 means you need a very long runway), and inflation regime. Add your guaranteed income: Social Security, pension, rental income. Choose your Social Security claim age — the difference between claiming at 62 vs. 70 is 24% more income per month, permanently. Forever. The math is not subtle.</p>
           <div class="ht-callout gold">
@@ -1031,7 +1031,7 @@ body {
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Estate Alpha</td><td>What is the step-up-in-basis benefit in taxable at death?</td><td>Unrealized gains in taxable accounts vanish at death — a powerful estate tool for appreciated index holdings.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Tax Calc</td><td>What will my actual federal tax bill look like in retirement?</td><td>Real 2025 brackets, qualified dividend rates, and NIIT — not flat-rate estimates. Models ordinary income, Traditional withdrawals, and dividends together.</td></tr>
           <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Burn Stages</td><td>How much do I actually spend, by life stage?</td><td>Retirement spending follows a smile curve. Healthcare rises as activity falls. Model three distinct decades with per-category granularity.</td></tr>
-          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Retirement</td><td>Does my money last? At what rate can I withdraw safely?</td><td>Bengen's SAFEMAX (4–4.5% rule) adjusted for your CAPE ratio, inflation regime, and return engine — with per-year account-by-account withdrawal modeling.</td></tr>
+          <tr><td style="color:var(--accent);font-family:'DM Mono',monospace;">Financial Runway</td><td>Does my money last? At what rate can I withdraw safely?</td><td>Bengen's SAFEMAX (4–4.5% rule) adjusted for your CAPE ratio, inflation regime, and return engine — with per-year account-by-account withdrawal modeling.</td></tr>
         </tbody>
       </table>
     </div>
@@ -1098,7 +1098,7 @@ body {
    TABS
    ═══════════════════════════════════════════════════════════════════ */
 const tabDefs = [
-  ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Retirement'],
+  ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Financial Runway'],
   ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],['howto','How To Use'],['about','About']
 ];
@@ -1517,7 +1517,7 @@ function buildOverview() {
         <div class="metric-card" style="border-color:var(--accent)33;">
           <div class="label">Active portfolio</div>
           <div style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:3px;">${customPort.name||'Starting Portfolio'}</div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${customPort.holdings.length} ETF${customPort.holdings.length!==1?'s':''} · ${(engineMeta['custom'].ret*100).toFixed(1)}% est. return</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px;">${customPort.holdings.length} holding${customPort.holdings.length!==1?'s':''} · ${(engineMeta['custom'].ret*100).toFixed(1)}% est. return</div>
           <button onclick="setPortfolioMode('custom')" style="font-size:10px;padding:4px 10px;background:none;border:1px solid var(--accent);color:var(--accent);border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif;">Edit holdings →</button>
         </div>` : ''}
     </div>
@@ -2768,6 +2768,100 @@ const tickerDB = {
   'VNQ' :{name:'Vanguard Real Estate ETF',          er:0.12, div:3.8, cat:'Real Estate',         loc:'Traditional', estRet:0.075},
   'GLD' :{name:'SPDR Gold Shares',                  er:0.40, div:0.0, cat:'Commodities',         loc:'Traditional', estRet:0.030},
   'IAU' :{name:'iShares Gold Trust',                er:0.25, div:0.0, cat:'Commodities',         loc:'Traditional', estRet:0.030},
+  /* Money Market / Stable Value */
+  'VMRXX':{name:'Vanguard Federal Money Market',    er:0.11, div:4.5, cat:'Money Market',        loc:'Taxable',     estRet:0.045},
+  'VMMXX':{name:'Vanguard Prime Money Market',      er:0.16, div:4.5, cat:'Money Market',        loc:'Taxable',     estRet:0.045},
+  'SNSXX':{name:'Schwab Treasury Obligations MM',   er:0.34, div:4.4, cat:'Money Market',        loc:'Taxable',     estRet:0.045},
+  'SWVXX':{name:'Schwab Value Advantage Money Mkt', er:0.34, div:4.6, cat:'Money Market',        loc:'Taxable',     estRet:0.045},
+  'FDRXX':{name:'Fidelity Government Money Market', er:0.42, div:4.5, cat:'Money Market',        loc:'Taxable',     estRet:0.045},
+  'SPRXX':{name:'Fidelity Prime Money Market',      er:0.42, div:4.7, cat:'Money Market',        loc:'Taxable',     estRet:0.045},
+  /* Vanguard Mutual Funds (Admiral / Investor share classes) */
+  'VFIAX':{name:'Vanguard 500 Index Admiral',       er:0.04, div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  'VFINX':{name:'Vanguard 500 Index Investor',      er:0.14, div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  'VTSAX':{name:'Vanguard Total Stock Mkt Admiral', er:0.04, div:1.4, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'VTSMX':{name:'Vanguard Total Stock Mkt Investor',er:0.14, div:1.4, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'VBTLX':{name:'Vanguard Total Bond Market Admiral',er:0.05,div:3.2, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  'VBMFX':{name:'Vanguard Total Bond Market Investor',er:0.15,div:3.2,cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  'VTIAX':{name:'Vanguard Total Intl Stock Admiral',er:0.11, div:2.8, cat:'Intl Total Market',   loc:'Taxable',     estRet:0.075},
+  'VGTSX':{name:'Vanguard Total Intl Stock Investor',er:0.17,div:2.8, cat:'Intl Total Market',   loc:'Taxable',     estRet:0.075},
+  'VWENX':{name:'Vanguard Wellington Admiral',      er:0.17, div:2.4, cat:'Balanced',            loc:'Traditional', estRet:0.070},
+  'VWELX':{name:'Vanguard Wellington Investor',     er:0.25, div:2.4, cat:'Balanced',            loc:'Traditional', estRet:0.070},
+  'VWIAX':{name:'Vanguard Wellesley Income Admiral',er:0.16, div:3.2, cat:'Conservative Alloc',  loc:'Traditional', estRet:0.055},
+  'VWINX':{name:'Vanguard Wellesley Income Investor',er:0.23,div:3.2, cat:'Conservative Alloc',  loc:'Traditional', estRet:0.055},
+  'VFWAX':{name:'Vanguard FTSE All-World ex-US Adm',er:0.10, div:2.8, cat:'Intl Total Market',   loc:'Taxable',     estRet:0.075},
+  'VWUSX':{name:'Vanguard US Growth Investor',      er:0.38, div:0.4, cat:'US Large Growth',     loc:'Roth',        estRet:0.088},
+  'PRIMX':{name:'Vanguard PRIMECAP Investor',       er:0.39, div:0.8, cat:'US Large Blend',      loc:'Taxable',     estRet:0.088},
+  /* Vanguard Target Retirement Funds */
+  'VTINX':{name:'Vanguard Target Retirement Income',er:0.08, div:2.8, cat:'Target Date',         loc:'Traditional', estRet:0.045},
+  'VTTVX':{name:'Vanguard Target Retirement 2025', er:0.08, div:2.5, cat:'Target Date',          loc:'Traditional', estRet:0.055},
+  'VTHRX':{name:'Vanguard Target Retirement 2030', er:0.08, div:2.3, cat:'Target Date',          loc:'Traditional', estRet:0.060},
+  'VTTHX':{name:'Vanguard Target Retirement 2035', er:0.08, div:2.1, cat:'Target Date',          loc:'Traditional', estRet:0.065},
+  'VFORX':{name:'Vanguard Target Retirement 2040', er:0.08, div:1.9, cat:'Target Date',          loc:'Traditional', estRet:0.070},
+  'VTIVX':{name:'Vanguard Target Retirement 2045', er:0.08, div:1.8, cat:'Target Date',          loc:'Traditional', estRet:0.075},
+  'VFIFX':{name:'Vanguard Target Retirement 2050', er:0.08, div:1.7, cat:'Target Date',          loc:'Traditional', estRet:0.080},
+  'VFFVX':{name:'Vanguard Target Retirement 2055', er:0.08, div:1.6, cat:'Target Date',          loc:'Traditional', estRet:0.082},
+  'VLXVX':{name:'Vanguard Target Retirement 2060', er:0.08, div:1.5, cat:'Target Date',          loc:'Traditional', estRet:0.083},
+  'VTTSX':{name:'Vanguard Target Retirement 2065', er:0.08, div:1.5, cat:'Target Date',          loc:'Traditional', estRet:0.084},
+  /* Fidelity Mutual Funds */
+  'FUSEX':{name:'Fidelity Spartan 500 Index Investor',er:0.015,div:1.3,cat:'US Large Blend',     loc:'Taxable',     estRet:0.085},
+  'FSMAX':{name:'Fidelity Extended Market Index',   er:0.035,div:1.2, cat:'US Mid/Small Blend',  loc:'Traditional', estRet:0.088},
+  'FXNAX':{name:'Fidelity US Bond Index',           er:0.025,div:3.2, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  'FSGGX':{name:'Fidelity Global ex US Index',      er:0.055,div:2.8, cat:'Intl Total Market',   loc:'Taxable',     estRet:0.075},
+  'FSPSX':{name:'Fidelity International Index',     er:0.035,div:2.8, cat:'Intl Developed',      loc:'Taxable',     estRet:0.075},
+  'FCONX':{name:'Fidelity Conservative Income Bond',er:0.35, div:3.0, cat:'US Bonds',            loc:'Traditional', estRet:0.040},
+  /* Fidelity Freedom Index (Target Date) */
+  'FIKFX':{name:'Fidelity Freedom Index Income',    er:0.12, div:2.8, cat:'Target Date',         loc:'Traditional', estRet:0.045},
+  'FNSDX':{name:'Fidelity Freedom Index 2020',      er:0.12, div:2.5, cat:'Target Date',         loc:'Traditional', estRet:0.055},
+  'FNOSX':{name:'Fidelity Freedom Index 2025',      er:0.12, div:2.3, cat:'Target Date',         loc:'Traditional', estRet:0.060},
+  'FNIFX':{name:'Fidelity Freedom Index 2030',      er:0.12, div:2.1, cat:'Target Date',         loc:'Traditional', estRet:0.065},
+  'FNHFX':{name:'Fidelity Freedom Index 2035',      er:0.12, div:1.9, cat:'Target Date',         loc:'Traditional', estRet:0.070},
+  'FNGGX':{name:'Fidelity Freedom Index 2040',      er:0.12, div:1.7, cat:'Target Date',         loc:'Traditional', estRet:0.075},
+  'FNKFX':{name:'Fidelity Freedom Index 2045',      er:0.12, div:1.6, cat:'Target Date',         loc:'Traditional', estRet:0.078},
+  'FNLFX':{name:'Fidelity Freedom Index 2050',      er:0.12, div:1.5, cat:'Target Date',         loc:'Traditional', estRet:0.080},
+  'FNSFX':{name:'Fidelity Freedom Index 2055',      er:0.12, div:1.4, cat:'Target Date',         loc:'Traditional', estRet:0.082},
+  'FNBFX':{name:'Fidelity Freedom Index 2060',      er:0.12, div:1.3, cat:'Target Date',         loc:'Traditional', estRet:0.083},
+  /* Fidelity Freedom Active (Target Date) */
+  'FFFHX':{name:'Fidelity Freedom 2025',            er:0.62, div:2.3, cat:'Target Date',         loc:'Traditional', estRet:0.060},
+  'FFFGX':{name:'Fidelity Freedom 2030',            er:0.62, div:2.1, cat:'Target Date',         loc:'Traditional', estRet:0.065},
+  'FFFDX':{name:'Fidelity Freedom 2035',            er:0.62, div:1.9, cat:'Target Date',         loc:'Traditional', estRet:0.068},
+  'FFFEX':{name:'Fidelity Freedom 2040',            er:0.65, div:1.7, cat:'Target Date',         loc:'Traditional', estRet:0.072},
+  'FFFCX':{name:'Fidelity Freedom 2045',            er:0.65, div:1.5, cat:'Target Date',         loc:'Traditional', estRet:0.075},
+  'FFFBX':{name:'Fidelity Freedom 2050',            er:0.65, div:1.4, cat:'Target Date',         loc:'Traditional', estRet:0.078},
+  /* Schwab Mutual Funds */
+  'SWPPX':{name:'Schwab S&P 500 Index Fund',        er:0.02, div:1.3, cat:'US Large Blend',      loc:'Taxable',     estRet:0.085},
+  'SWTSX':{name:'Schwab Total Stock Market Index',  er:0.03, div:1.4, cat:'US Total Market',     loc:'Taxable',     estRet:0.085},
+  'SWISX':{name:'Schwab International Index',       er:0.06, div:2.8, cat:'Intl Developed',      loc:'Taxable',     estRet:0.075},
+  'SWSTX':{name:'Schwab Small-Cap Index Fund',      er:0.04, div:1.2, cat:'US Small Blend',      loc:'Traditional', estRet:0.090},
+  'SWAGX':{name:'Schwab US Aggregate Bond Index',   er:0.04, div:3.2, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  /* T. Rowe Price Target Date */
+  'TRRHX':{name:'T. Rowe Price Retirement 2025',   er:0.57, div:2.3, cat:'Target Date',          loc:'Traditional', estRet:0.060},
+  'TRRCX':{name:'T. Rowe Price Retirement 2030',   er:0.59, div:2.1, cat:'Target Date',          loc:'Traditional', estRet:0.065},
+  'TRRJX':{name:'T. Rowe Price Retirement 2035',   er:0.59, div:1.9, cat:'Target Date',          loc:'Traditional', estRet:0.068},
+  'TRRBX':{name:'T. Rowe Price Retirement 2040',   er:0.62, div:1.7, cat:'Target Date',          loc:'Traditional', estRet:0.072},
+  'TRRAX':{name:'T. Rowe Price Retirement 2045',   er:0.62, div:1.5, cat:'Target Date',          loc:'Traditional', estRet:0.075},
+  'TRRDX':{name:'T. Rowe Price Retirement 2050',   er:0.62, div:1.4, cat:'Target Date',          loc:'Traditional', estRet:0.078},
+  'TRREX':{name:'T. Rowe Price Retirement 2055',   er:0.62, div:1.3, cat:'Target Date',          loc:'Traditional', estRet:0.080},
+  /* American Funds */
+  'AGTHX':{name:'American Funds Growth Fund of America',er:0.60,div:0.5,cat:'US Large Growth',   loc:'Roth',        estRet:0.085},
+  'AEPGX':{name:'American Funds EuroPacific Growth',er:0.82,div:1.5, cat:'Intl Developed',       loc:'Taxable',     estRet:0.075},
+  'AWSHX':{name:'American Funds Washington Mutual', er:0.58, div:1.5, cat:'US Large Blend',      loc:'Taxable',     estRet:0.080},
+  'ABALX':{name:'American Funds American Balanced', er:0.58, div:1.8, cat:'Balanced',            loc:'Traditional', estRet:0.068},
+  'AIVSX':{name:'American Funds Invst Co of America',er:0.59,div:1.5, cat:'US Large Blend',      loc:'Taxable',     estRet:0.080},
+  'AMRMX':{name:'American Funds American Mutual',   er:0.59, div:2.0, cat:'US Large Value',      loc:'Taxable',     estRet:0.078},
+  /* PIMCO */
+  'PTTAX':{name:'PIMCO Total Return Bond A',        er:0.85, div:3.5, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  'PTTRX':{name:'PIMCO Total Return Bond Instl',    er:0.46, div:3.5, cat:'US Bonds',            loc:'Traditional', estRet:0.045},
+  /* Individual Stocks (common) */
+  'AAPL' :{name:'Apple Inc',                        er:0,    div:0.5, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'MSFT' :{name:'Microsoft Corp',                   er:0,    div:0.7, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'AMZN' :{name:'Amazon.com Inc',                   er:0,    div:0.0, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'GOOG' :{name:'Alphabet Inc (Google)',             er:0,    div:0.0, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'GOOGL':{name:'Alphabet Inc Class A',             er:0,    div:0.0, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'META' :{name:'Meta Platforms Inc',               er:0,    div:0.4, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'TSLA' :{name:'Tesla Inc',                        er:0,    div:0.0, cat:'Individual Stock',    loc:'Roth',        estRet:0.085},
+  'NVDA' :{name:'NVIDIA Corp',                      er:0,    div:0.0, cat:'Individual Stock',    loc:'Roth',        estRet:0.085},
+  'BRK.B':{name:'Berkshire Hathaway Class B',       er:0,    div:0.0, cat:'Individual Stock',    loc:'Taxable',     estRet:0.085},
+  'JPM'  :{name:'JPMorgan Chase & Co',              er:0,    div:2.0, cat:'Individual Stock',    loc:'Taxable',     estRet:0.080},
 };
 
 const catEstRet = {
@@ -2778,7 +2872,98 @@ const catEstRet = {
   'Emerging Markets':0.090,'EM Value':0.095,
   'US Bonds':0.045,'Intl Bonds':0.040,'US Long Bonds':0.045,'US Inflation-Linked Bonds':0.030,
   'Real Estate':0.075,'Commodities':0.030,'Individual Stock':0.085,
+  'Balanced':0.068,'Conservative Alloc':0.055,'Target Date':0.068,
+  'Money Market':0.045,'US Mid/Small Blend':0.088,'Bonds Blended':0.048,
 };
+
+/* ── Yahoo Finance real-time ticker validation ──────────────────────────────
+   Endpoint returns JSON with CORS headers; no API key needed.
+   Cache stores Promise|result|null so concurrent calls on the same ticker
+   share a single in-flight request.                                          */
+const YF_CACHE = {};
+
+const YF_TYPE_CAT = {
+  MUTUALFUND: 'US Large Blend', ETF: 'US Large Blend',
+  EQUITY: 'Individual Stock',   INDEX: 'US Large Blend',
+  CURRENCY: 'Other',            CRYPTOCURRENCY: 'Other',
+};
+
+function _yfFetch(url) {
+  return fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+}
+
+/* Validate a known ticker symbol — requires exact match in Yahoo results */
+async function lookupTickerYahoo(ticker) {
+  const sym = ticker.trim().toUpperCase();
+  if (!sym) return null;
+
+  /* Local DB is always authoritative and instant */
+  if (tickerDB[sym]) return { ...tickerDB[sym], source: 'local' };
+
+  /* Return cached result or share an in-flight promise */
+  if (sym in YF_CACHE) return YF_CACHE[sym];
+
+  const promise = _yfFetch(
+    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(sym)}&quotesCount=6&newsCount=0&enableFuzzyQuery=false&region=US`
+  )
+  .then(d => {
+    /* Require an exact symbol match to avoid fuzzy false-positives */
+    const q = (d.quotes || []).find(x => x.symbol === sym);
+    if (!q) { YF_CACHE[sym] = null; return null; }
+    const result = {
+      name: q.shortname || q.longname || sym,
+      er: 0, div: 0,
+      cat: YF_TYPE_CAT[q.quoteType] || 'US Large Blend',
+      source: 'yahoo',
+    };
+    YF_CACHE[sym] = result;
+    return result;
+  })
+  .catch(() => { YF_CACHE[sym] = null; return null; });
+
+  YF_CACHE[sym] = promise;
+  return promise;
+}
+
+/* Search for a fund by display name — used for non-ticker entries (CUSIPs, fund names).
+   Returns the best guess { symbol, name, cat } or null.
+   Uses Yahoo Finance text search which covers Vanguard / Fidelity / T. Rowe / Schwab
+   target-date series and most publicly-traded mutual funds.                         */
+const YF_NAME_CACHE = {};
+async function searchFundByName(fundName) {
+  const key = fundName.trim().toLowerCase();
+  if (!key) return null;
+  if (key in YF_NAME_CACHE) return YF_NAME_CACHE[key];
+
+  const promise = _yfFetch(
+    `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(fundName)}&quotesCount=5&newsCount=0&enableFuzzyQuery=true&region=US`
+  )
+  .then(d => {
+    /* Accept mutual funds and ETFs; prefer target-date funds when query mentions a year */
+    const hasYear = /20[2-9]\d/.test(fundName);
+    const quotes = (d.quotes || []).filter(x => ['MUTUALFUND','ETF'].includes(x.quoteType));
+    if (!quotes.length) { YF_NAME_CACHE[key] = null; return null; }
+
+    /* Prefer a match whose name also contains the target year if present */
+    const best = hasYear
+      ? (quotes.find(x => /20[2-9]\d/.test(x.shortname || '')) || quotes[0])
+      : quotes[0];
+
+    const result = {
+      symbol: best.symbol,
+      name:   best.shortname || best.longname || best.symbol,
+      cat:    YF_TYPE_CAT[best.quoteType] || 'US Large Blend',
+      source: 'yahoo-name',
+    };
+    YF_NAME_CACHE[key] = result;
+    return result;
+  })
+  .catch(() => { YF_NAME_CACHE[key] = null; return null; });
+
+  YF_NAME_CACHE[key] = promise;
+  return promise;
+}
 
 /* Pre-populate fundSets / engineMeta so setReturnEngine('custom') never fails */
 fundSets['custom'] = [];
@@ -2857,11 +3042,21 @@ function cpRenderHoldings() {
   } else {
     tbody = h.map(r => {
       const acctColor = r.acct==='Taxable'?'var(--taxable-color)':r.acct==='Traditional'?'var(--trad-color)':'var(--roth-color)';
-      const badge = r.ticker
-        ? (tickerDB[r.ticker.toUpperCase()]
-          ? '<span class="cp-badge">✓ known</span>'
-          : '<span class="cp-unknown">? unknown</span>')
-        : '';
+      /* _localKnown is stamped at parse/update time — never relies on a runtime lookup */
+      const isKnown = r._localKnown || !!(r.ticker && tickerDB[r.ticker.toUpperCase()]);
+      const badge = r._validating
+        ? '<span class="cp-unknown" style="color:var(--accent3);">⟳ checking</span>'
+        : !r.ticker
+          ? (r._suggestedTicker
+              ? `<span class="cp-unknown" style="color:var(--accent3);cursor:pointer;"
+                  title="Yahoo suggests: ${escHtml(r._suggestedTicker)} — ${escHtml(r._suggestedName||'')}. Click to apply."
+                  onclick="cpApplySuggestion(${r.id})">💡 ${escHtml(r._suggestedTicker)}</span>`
+              : '<span class="cp-unknown">no ticker</span>')
+          : isKnown
+            ? '<span class="cp-badge">✓ known</span>'
+            : r._yahooValidated
+              ? '<span class="cp-badge" style="background:rgba(13,115,119,0.12);color:var(--accent3);border-color:rgba(13,115,119,0.3);">✓ verified</span>'
+              : '<span class="cp-unknown">custom</span>';
       return `<tr>
         <td style="white-space:nowrap;">
           <input class="cp-input cp-ticker" value="${r.ticker}" placeholder="VOO"
@@ -2906,7 +3101,7 @@ function cpRenderHoldings() {
   const covEl = document.getElementById('cp-coverage');
   if (covEl) {
     const byAcct = {Taxable:[], Traditional:[], Roth:[]};
-    customPort.holdings.forEach(r => { if(r.ticker && r.value>0) (byAcct[r.acct]||[]).push(r); });
+    customPort.holdings.forEach(r => { if(r.value>0) (byAcct[r.acct]||[]).push(r); });
     const pill = (acct, color) => {
       const rows = byAcct[acct] || [];
       const total = rows.reduce((s,r)=>s+(r.value||0),0);
@@ -2914,7 +3109,7 @@ function cpRenderHoldings() {
       return `<div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:5px;border:1px solid ${ok?color:'var(--border)'};background:${ok?color+'15':'var(--surface2)'};">
         <span style="font-size:11px;color:${ok?color:'var(--muted)'};">${ok?'✓':'○'}</span>
         <span style="font-size:11px;font-weight:600;color:${ok?color:'var(--muted)'};">${acct}</span>
-        ${ok ? `<span style="font-size:11px;color:var(--muted);">${rows.length} ETF${rows.length!==1?'s':''} · ${fmtM(total)}</span>` : `<span style="font-size:11px;color:var(--muted);">no ETFs</span>`}
+        ${ok ? `<span style="font-size:11px;color:var(--muted);">${rows.length} holding${rows.length!==1?'s':''} · ${fmtM(total)}</span>` : `<span style="font-size:11px;color:var(--muted);">no holdings</span>`}
       </div>`;
     };
     covEl.innerHTML =
@@ -2925,6 +3120,17 @@ function cpRenderHoldings() {
 }
 
 function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }
+
+/* Accept the Yahoo-suggested ticker for a no-ticker row */
+function cpApplySuggestion(id) {
+  const row = customPort.holdings.find(h => h.id === id);
+  if (!row || !row._suggestedTicker) return;
+  row.ticker = row._suggestedTicker;
+  if (!row.fundName || row.fundName === row._suggestedTicker) row.fundName = row._suggestedName || row._suggestedTicker;
+  if (row._suggestedCat) row.cat = row._suggestedCat;
+  delete row._suggestedTicker; delete row._suggestedName; delete row._suggestedCat;
+  cpUpdateTicker(id, row.ticker); /* triggers full async validation + re-render */
+}
 
 function cpAddRow() {
   customPort.holdings.push({id:cpNextId(), ticker:'', fundName:'', acct:'Taxable', value:0, er:0, div:0, cat:'US Large Blend'});
@@ -2937,21 +3143,48 @@ function cpRemoveRow(id) {
   cpRenderStats();
 }
 
-function cpUpdateTicker(id, rawTicker) {
+async function cpUpdateTicker(id, rawTicker) {
   const row = customPort.holdings.find(h => h.id === id);
   if (!row) return;
   const ticker = rawTicker.trim().toUpperCase();
   row.ticker = ticker;
-  const data = cpLookup(ticker);
-  if (data) {
-    if (!row.fundName) row.fundName = data.name;
-    row.er  = data.er;
-    row.div = data.div;
-    row.cat = data.cat;
-    if (row.acct === 'Taxable' && data.loc !== 'Taxable') row.acct = data.loc;
+  row._validating = false;
+  row._yahooValidated = false;
+
+  if (!ticker) { cpRenderHoldings(); cpRenderStats(); return; }
+
+  /* Try local DB first — instant */
+  const local = tickerDB[ticker];
+  if (local) {
+    if (!row.fundName || row.fundName === ticker) row.fundName = local.name;
+    row.er  = local.er;
+    row.div = local.div;
+    row.cat = local.cat;
+    row._localKnown = true;
+    row._yahooValidated = false;
+    if (row.acct === 'Taxable' && local.loc && local.loc !== 'Taxable') row.acct = local.loc;
+    cpRenderHoldings(); cpRenderStats();
+    return;
   }
+
+  /* Not in local DB — show spinner and query Yahoo Finance */
+  row._localKnown = false;
+  row._validating = true;
   cpRenderHoldings();
-  cpRenderStats();
+
+  const result = await lookupTickerYahoo(ticker);
+
+  /* Guard against ticker changing while we waited */
+  if (row.ticker !== ticker) return;
+
+  row._validating = false;
+  if (result) {
+    if (!row.fundName || row.fundName === ticker) row.fundName = result.name;
+    if (!row.er && result.er) row.er = result.er;
+    if (!row.cat || row.cat === 'US Large Blend') row.cat = result.cat;
+    row._yahooValidated = true;
+  }
+  cpRenderHoldings(); cpRenderStats();
 }
 
 function cpUpdateField(id, field, raw) {
@@ -2993,28 +3226,21 @@ function cpActivate() {
 
   if (customPort.holdings.length === 0) { setStatus('⚠ Add at least one holding first'); return; }
 
-  /* Validate: every holding must have a ticker */
-  const missingTicker = customPort.holdings.filter(h => !h.ticker || h.ticker.trim() === '' || h.ticker === '?');
-  if (missingTicker.length > 0) {
-    setStatus(`⚠ Every holding must have a ticker symbol (${missingTicker.length} missing)`);
-    return;
-  }
-
   /* Validate: every holding must have a dollar value */
   const stats = cpComputeStats();
   if (stats.total === 0) { setStatus('⚠ Enter dollar values for your holdings'); return; }
 
-  /* Warn if additions go to accounts that have no ETF holdings */
-  const acctWithETFs = new Set(customPort.holdings.map(h => h.acct));
+  /* Warn if additions go to accounts that have no holdings */
+  const acctWithHoldings = new Set(customPort.holdings.filter(h=>h.value>0).map(h => h.acct));
   const acctKeys  = {Taxable:'taxable', Traditional:'traditional', Roth:'roth'};
   const orphanAccts = ['Taxable','Traditional','Roth'].filter(acct => {
     const k = acctKeys[acct];
     const hasAdditions = state.additions.some(a => a[k] > 0);
-    return hasAdditions && !acctWithETFs.has(acct);
+    return hasAdditions && !acctWithHoldings.has(acct);
   });
   if (orphanAccts.length > 0) {
     const names = orphanAccts.join(', ');
-    setStatus(`⚠ ${names} has annual additions but no ETF assigned. Add an ETF to that account or clear the additions.`, 8000);
+    setStatus(`⚠ ${names} has annual additions but no holdings assigned. Add a holding to that account or clear the additions.`, 8000);
     /* Don't block — allow activation anyway, projections still work */
   }
 
@@ -3024,10 +3250,10 @@ function cpActivate() {
   engineMeta['custom'] = {
     label: `${customPort.name||'Starting Portfolio'} (${(ret*100).toFixed(1)}%)`,
     ret,
-    desc: `${customPort.holdings.length} ETF${customPort.holdings.length!==1?'s':''} · blended ER ${stats.blendedER.toFixed(2)}%`,
+    desc: `${customPort.holdings.length} holding${customPort.holdings.length!==1?'s':''} · blended ER ${stats.blendedER.toFixed(2)}%`,
   };
 
-  /* Account balances are DERIVED from ETF holdings — single source of truth */
+  /* Account balances are DERIVED from holdings — single source of truth */
   state.taxable     = stats.taxable;
   state.traditional = stats.traditional;
   state.roth        = stats.roth;
@@ -3042,7 +3268,7 @@ function cpActivate() {
     btn.classList.add('active');
     setTimeout(() => { btn.textContent = 'Activate This Portfolio →'; btn.classList.remove('active'); }, 3500);
   }
-  if (!orphanAccts.length) setStatus(`${customPort.holdings.length} ETFs · ${fmtM(stats.total)} total · Taxable ${fmtM(stats.taxable)} · Traditional ${fmtM(stats.traditional)} · Roth ${fmtM(stats.roth)}`, 0);
+  if (!orphanAccts.length) setStatus(`${customPort.holdings.length} holding${customPort.holdings.length!==1?'s':''} · ${fmtM(stats.total)} total · Taxable ${fmtM(stats.taxable)} · Traditional ${fmtM(stats.traditional)} · Roth ${fmtM(stats.roth)}`, 0);
 }
 
 function buildCustomPortfolio() {
@@ -3183,7 +3409,7 @@ function buildNetWorth() {
       const tot=totFn(p); const isRet=p.age===state.retireAge;
       return `<tr style="${isRet?'background:var(--surface);border-top:1px solid var(--accent);':''}">
         <td style="font-family:'DM Mono',monospace;font-weight:${isRet?700:400};color:${isRet?'var(--accent)':''};">${p.age}${isRet?' ★':''}</td>
-        <td style="font-size:11px;color:var(--muted);">${p.phase==='accum'?'Accumulation':'Retirement'}</td>
+        <td style="font-size:11px;color:var(--muted);">${p.phase==='accum'?'Accumulation':'Runway'}</td>
         <td style="font-family:'DM Mono',monospace;color:var(--taxable-color);">${fmtM(p.tax)}</td>
         <td style="font-family:'DM Mono',monospace;color:var(--trad-color);">${fmtM(p.trad)}</td>
         <td style="font-family:'DM Mono',monospace;color:var(--roth-color);">${fmtM(p.roth)}</td>
@@ -3743,31 +3969,48 @@ function parseXlsx(binary, fname) {
     const skipped = [];
 
     rows.forEach((r, i) => {
-      const sym     = String(r['Symbol'] || '').trim().toUpperCase();
+      const rawSym  = String(r['Symbol'] || '').trim();
+      const sym     = rawSym.toUpperCase();
       const name    = String(r['Name'] || '').trim();
       const bal     = parseFloat(String(r['Current Balance'] || '0').replace(/[^0-9.]/g, '')) || 0;
       const er      = parseFloat(r['ER'] || 0) || 0;
       const loc     = String(r['Location'] || '').trim();
       const broker  = String(r['Account Location Broker/Company'] || '').trim();
-      const type    = String(r['Type'] || '').trim();
+      const type    = String(r['Type'] || '').trim().toUpperCase();
 
-      if (!sym && !name) { skipped.push(`Row ${i+2}: no symbol or name`); return; }
-      if (bal <= 0)      { skipped.push(`${sym||name}: balance is 0 — skipped`); return; }
+      if (!rawSym && !name) { skipped.push(`Row ${i+2}: no symbol or name`); return; }
+      if (bal <= 0)         { skipped.push(`${rawSym||name}: balance is $0 — skipped`); return; }
+
+      /* Detect if Symbol is a real ticker (1-6 uppercase letters, optional .X suffix)
+         vs a CUSIP (9 alphanumeric chars) or a fund name (contains spaces or > 8 chars) */
+      const isTickerLike = /^[A-Z]{1,6}(?:\.[A-Z])?$/.test(sym);
+      const ticker  = isTickerLike ? sym : '';
+      /* If not a ticker, use the raw symbol or name as the display name */
+      const rawDesc = !isTickerLike && rawSym ? rawSym : '';
 
       const acct = mapLocation(loc);
-      const db   = sym ? (tickerDB[sym] || null) : null;
+      const db   = ticker ? (tickerDB[ticker] || null) : null;
+
+      /* Estimate category from Type column when fund is unknown */
+      const catFromType = type === 'ETF' ? 'US Large Blend'
+        : type === 'STOCK' ? 'Individual Stock'
+        : type === 'MUTUAL FUND' ? 'US Large Blend'
+        : type.includes('TARGET') || type.includes('DATE') ? 'Target Date'
+        : type === 'BOND' ? 'US Bonds'
+        : 'US Large Blend';
 
       xlsxParsed.push({
-        id:       cpNextId(),
-        ticker:   sym,
-        fundName: name || (db ? db.name : sym),
+        id:          cpNextId(),
+        ticker,
+        fundName:    name || rawDesc || (db ? db.name : ticker),
         acct,
-        value:    bal,
-        er:       db ? db.er : er,
-        div:      db ? db.div : 1.5,
-        cat:      db ? db.cat : (type === 'ETF' ? 'US Large Blend' : type === 'Stock' ? 'US Large Blend' : 'US Large Blend'),
+        value:       bal,
+        er:          db ? db.er : er,
+        div:         db ? db.div : 1.5,
+        cat:         db ? db.cat : catFromType,
         broker,
-        origLoc:  loc,
+        origLoc:     loc,
+        _localKnown: !!(ticker && db),   /* stamped at parse-time — no runtime lookup needed */
       });
     });
 
@@ -3835,7 +4078,64 @@ function applyXlsxImport() {
   cpRenderHoldings();
   cpRenderStats();
   const st = document.getElementById('cp-activate-status');
-  if (st) { st.textContent = `${customPort.holdings.length} holdings imported ✓`; setTimeout(()=>st.textContent='', 4000); }
+  if (st) { st.textContent = `${customPort.holdings.length} holdings imported — validating tickers…`; }
+
+  /* ── Phase 1: validate ticker-like symbols against Yahoo Finance ── */
+  const tickerRows = customPort.holdings.filter(h => h.ticker);
+  const uniqueTickers = [...new Set(tickerRows.map(h => h.ticker))];
+
+  /* Phase 2: name-search no-ticker rows (CUSIPs / fund names stripped by parser) */
+  const noTickerRows = customPort.holdings.filter(h => !h.ticker && h.fundName);
+
+  let pending = uniqueTickers.length + noTickerRows.length;
+  const maybeFinish = () => {
+    if (--pending > 0) return;
+    if (!st) return;
+    const verified = customPort.holdings.filter(h =>
+      h._yahooValidated || (h.ticker && tickerDB[h.ticker])
+    ).length;
+    st.textContent = `${customPort.holdings.length} holdings · ${verified} verified ✓`;
+    setTimeout(() => { if (st) st.textContent = ''; }, 5000);
+  };
+
+  if (pending === 0) { if (st) st.textContent = `${customPort.holdings.length} holdings imported ✓`; return; }
+
+  uniqueTickers.forEach(sym => {
+    /* Skip spinner for tickers already in local DB — they resolve instantly */
+    const inLocal = !!tickerDB[sym];
+    if (!inLocal) {
+      customPort.holdings.filter(h => h.ticker === sym).forEach(h => { h._validating = true; });
+      cpRenderHoldings();
+    }
+
+    lookupTickerYahoo(sym).then(result => {
+      customPort.holdings.filter(h => h.ticker === sym).forEach(h => {
+        h._validating = false;
+        if (result) {
+          if (!h.fundName || h.fundName === sym) h.fundName = result.name;
+          if (result.er) h.er = result.er;
+          if (result.cat && result.cat !== 'US Large Blend') h.cat = result.cat;
+          if (inLocal) { h._localKnown = true; }      /* re-confirm from local DB result */
+          else         { h._yahooValidated = true; }  /* verified live via Yahoo */
+        }
+      });
+      cpRenderHoldings();
+      maybeFinish();
+    });
+  });
+
+  /* Name-search for no-ticker rows — best-effort, shows suggested ticker as tooltip */
+  noTickerRows.forEach(row => {
+    searchFundByName(row.fundName).then(result => {
+      if (result && customPort.holdings.find(h => h.id === row.id)) {
+        row._suggestedTicker = result.symbol;
+        row._suggestedName   = result.name;
+        row._suggestedCat    = result.cat;
+      }
+      cpRenderHoldings();
+      maybeFinish();
+    });
+  });
 }
 
 /* ═══ HOW TO USE FAQ TOGGLE ═══ */
