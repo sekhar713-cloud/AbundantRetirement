@@ -360,6 +360,7 @@ body {
     <div class="pmode-bar">
       <button id="pmode-btn-model"  class="pmode-btn active" onclick="setPortfolioMode('model')">Use a Model Portfolio</button>
       <button id="pmode-btn-custom" class="pmode-btn"        onclick="setPortfolioMode('custom')">Enter My Own Holdings</button>
+      <button id="pmode-btn-import" class="pmode-btn"        onclick="setPortfolioMode('import')">↑ Import Spreadsheet</button>
     </div>
 
     <!-- Portfolio balances — always visible, updated on mode switch / activation -->
@@ -419,6 +420,53 @@ body {
         <button class="cp-activate-btn" id="cp-activate-btn" onclick="cpActivate()">Activate This Portfolio →</button>
         <span id="cp-activate-status" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
       </div>
+    </div>
+
+    <!-- ── Import Spreadsheet mode ── -->
+    <div id="pmode-import-section" style="display:none;">
+
+      <!-- Download template -->
+      <div style="display:flex;align-items:flex-start;gap:16px;background:linear-gradient(135deg,rgba(27,58,107,0.05),rgba(13,115,119,0.04));border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:24px;">
+        <svg style="flex-shrink:0;margin-top:2px;" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0D7377" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><polyline points="9 15 12 18 15 15"/></svg>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px;">Start with the template</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.65;margin-bottom:12px;">Download the Excel template, fill in your holdings — ticker, balance, expense ratio, broker, and account type — then upload it here. All calculations update instantly.</div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <a href="./Import Portfolio Template.xlsx" download style="display:inline-flex;align-items:center;gap:6px;padding:8px 18px;background:#0f2347;color:#f0b73c;text-decoration:none;border-radius:6px;font-size:12px;font-weight:500;font-family:'DM Mono',monospace;border:1px solid rgba(200,151,42,0.3);transition:background 0.2s;" onmouseover="this.style.background='#1B3A6B'" onmouseout="this.style.background='#0f2347'">
+              ↓ Download Template (.xlsx)
+            </a>
+            <span style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;">Columns: Type · Symbol · Name · Balance · ER · Broker · Location</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload area -->
+      <div id="xlsx-drop-zone" style="border:2px dashed var(--border);border-radius:10px;padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:20px;background:var(--surface);"
+           onclick="document.getElementById('xlsx-file-input').click()"
+           ondragover="event.preventDefault();this.style.borderColor='#0D7377';this.style.background='rgba(13,115,119,0.04)';"
+           ondragleave="this.style.borderColor='';this.style.background='var(--surface)';"
+           ondrop="event.preventDefault();this.style.borderColor='';this.style.background='var(--surface)';handleXlsxDrop(event.dataTransfer.files[0]);">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:10px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px;">Drop your .xlsx file here, or click to browse</div>
+        <div style="font-size:12px;color:var(--muted);">Accepts the template format — Excel .xlsx files only</div>
+        <input type="file" id="xlsx-file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleXlsxDrop(this.files[0]);this.value='';">
+      </div>
+
+      <!-- Preview -->
+      <div id="xlsx-preview" style="display:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+          <div style="font-family:'Playfair Display',serif;font-size:16px;font-weight:600;color:var(--text);">Import preview <span id="xlsx-row-count" style="font-size:12px;font-family:'DM Mono',monospace;color:var(--muted);font-weight:400;"></span></div>
+          <div style="display:flex;gap:10px;align-items:center;">
+            <span id="xlsx-status" style="font-size:11px;font-family:'DM Mono',monospace;color:var(--muted);"></span>
+            <button onclick="applyXlsxImport()" style="padding:9px 22px;background:#0f2347;color:#f0b73c;border:1px solid rgba(200,151,42,0.3);border-radius:6px;font-size:12px;font-weight:500;font-family:'DM Mono',monospace;cursor:pointer;transition:background 0.2s;" onmouseover="this.style.background='#1B3A6B'" onmouseout="this.style.background='#0f2347'">Load into Holdings →</button>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="fund-table" id="xlsx-preview-table"></table>
+        </div>
+        <div id="xlsx-skipped" style="margin-top:10px;font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></div>
+      </div>
+
     </div>
 
     <!-- ── Section 2: DCP (V2) ───────────────────────────── -->
@@ -1072,22 +1120,18 @@ let lastModelEngine = 'factor';
 function setPortfolioMode(mode) {
   const modelSec  = document.getElementById('pmode-model-section');
   const customSec = document.getElementById('pmode-custom-section');
+  const importSec = document.getElementById('pmode-import-section');
   const btnModel  = document.getElementById('pmode-btn-model');
   const btnCustom = document.getElementById('pmode-btn-custom');
+  const btnImport = document.getElementById('pmode-btn-import');
   if (!modelSec || !customSec) return;
-  if (mode === 'custom') {
-    modelSec.style.display  = 'none';
-    customSec.style.display = '';
-    if (btnModel)  btnModel.classList.remove('active');
-    if (btnCustom) btnCustom.classList.add('active');
-  } else {
-    modelSec.style.display  = '';
-    customSec.style.display = 'none';
-    if (btnModel)  btnModel.classList.add('active');
-    if (btnCustom) btnCustom.classList.remove('active');
-    /* Switching away from custom — restore the last model engine so fund rows are real */
-    if (selectedEngine === 'custom') setReturnEngine(lastModelEngine);
-  }
+  [btnModel, btnCustom, btnImport].forEach(b => b && b.classList.remove('active'));
+  modelSec.style.display  = mode === 'model'  ? '' : 'none';
+  customSec.style.display = mode === 'custom' ? '' : 'none';
+  if (importSec) importSec.style.display = mode === 'import' ? '' : 'none';
+  if (mode === 'model')  { btnModel  && btnModel.classList.add('active'); if (selectedEngine === 'custom') setReturnEngine(lastModelEngine); }
+  if (mode === 'custom') { btnCustom && btnCustom.classList.add('active'); }
+  if (mode === 'import') { btnImport && btnImport.classList.add('active'); if (selectedEngine === 'custom') setReturnEngine(lastModelEngine); }
 }
 
 function jumpToTaxCalc(tradIncome, divIncome, afterTaxTarget) {
@@ -3629,6 +3673,169 @@ function buildHealthcareBridge() {
       Deductibles and out-of-pocket maximums add $3K–$10K/yr in worst-case scenarios.
       Verify at <a href="https://healthcare.gov" target="_blank" style="color:var(--accent2);">healthcare.gov</a>.
     </div>`;
+}
+
+/* ═══ XLSX IMPORT ═══ */
+let xlsxParsed = [];
+
+function loadSheetJS(cb) {
+  if (window.XLSX) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+  s.onload = cb;
+  s.onerror = () => {
+    const st = document.getElementById('xlsx-status');
+    if (st) st.textContent = 'Failed to load parser — check your connection.';
+  };
+  document.head.appendChild(s);
+}
+
+function handleXlsxDrop(file) {
+  if (!file) return;
+  if (!file.name.match(/\.xlsx?$/i)) {
+    alert('Please upload an Excel file (.xlsx or .xls).');
+    return;
+  }
+  const zone = document.getElementById('xlsx-drop-zone');
+  if (zone) zone.innerHTML = `<div style="font-size:13px;color:var(--muted);font-family:'DM Mono',monospace;">Reading ${file.name}…</div>`;
+  loadSheetJS(() => {
+    const reader = new FileReader();
+    reader.onload = e => parseXlsx(e.target.result, file.name);
+    reader.readAsBinaryString(file);
+  });
+}
+
+const LOCATION_MAP = {
+  'taxable':          'Taxable',
+  'taxable brokerage':'Taxable',
+  'brokerage':        'Taxable',
+  'traditional ira':  'Traditional',
+  'ira':              'Traditional',
+  'traditional':      'Traditional',
+  'rollover ira':     'Traditional',
+  '401k':             'Traditional',
+  '401(k)':           'Traditional',
+  '403b':             'Traditional',
+  '403(b)':           'Traditional',
+  'sep ira':          'Traditional',
+  'simple ira':       'Traditional',
+  'hsa':              'Traditional',
+  'roth ira':         'Roth',
+  'roth':             'Roth',
+  'roth 401k':        'Roth',
+  'roth 401(k)':      'Roth',
+  'roth 403b':        'Roth',
+  'college 529':      'Taxable',
+  '529':              'Taxable',
+};
+
+function mapLocation(loc) {
+  return LOCATION_MAP[(loc||'').toLowerCase().trim()] || 'Taxable';
+}
+
+function parseXlsx(binary, fname) {
+  try {
+    const wb = XLSX.read(binary, { type: 'binary' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+    xlsxParsed = [];
+    const skipped = [];
+
+    rows.forEach((r, i) => {
+      const sym     = String(r['Symbol'] || '').trim().toUpperCase();
+      const name    = String(r['Name'] || '').trim();
+      const bal     = parseFloat(String(r['Current Balance'] || '0').replace(/[^0-9.]/g, '')) || 0;
+      const er      = parseFloat(r['ER'] || 0) || 0;
+      const loc     = String(r['Location'] || '').trim();
+      const broker  = String(r['Account Location Broker/Company'] || '').trim();
+      const type    = String(r['Type'] || '').trim();
+
+      if (!sym && !name) { skipped.push(`Row ${i+2}: no symbol or name`); return; }
+      if (bal <= 0)      { skipped.push(`${sym||name}: balance is 0 — skipped`); return; }
+
+      const acct = mapLocation(loc);
+      const db   = sym ? (tickerDB[sym] || null) : null;
+
+      xlsxParsed.push({
+        id:       cpNextId(),
+        ticker:   sym,
+        fundName: name || (db ? db.name : sym),
+        acct,
+        value:    bal,
+        er:       db ? db.er : er,
+        div:      db ? db.div : 1.5,
+        cat:      db ? db.cat : (type === 'ETF' ? 'US Large Blend' : type === 'Stock' ? 'US Large Blend' : 'US Large Blend'),
+        broker,
+        origLoc:  loc,
+      });
+    });
+
+    renderXlsxPreview(xlsxParsed, skipped, fname);
+  } catch(err) {
+    const zone = document.getElementById('xlsx-drop-zone');
+    if (zone) zone.innerHTML = `<div style="color:var(--danger);font-size:13px;">Could not read file: ${err.message}</div>`;
+    console.error(err);
+  }
+}
+
+function renderXlsxPreview(parsed, skipped, fname) {
+  const zone = document.getElementById('xlsx-drop-zone');
+  if (zone) zone.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;justify-content:center;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0D7377" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+      <span style="font-size:13px;color:var(--accent3);font-family:'DM Mono',monospace;">${fname} loaded</span>
+      <button onclick="document.getElementById('xlsx-file-input').click()" style="margin-left:8px;font-size:11px;padding:3px 10px;background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;color:var(--muted);font-family:'DM Mono',monospace;">Change file</button>
+    </div>
+    <input type="file" id="xlsx-file-input" accept=".xlsx,.xls" style="display:none;" onchange="handleXlsxDrop(this.files[0]);this.value='';">`;
+
+  const preview = document.getElementById('xlsx-preview');
+  const countEl = document.getElementById('xlsx-row-count');
+  const statusEl= document.getElementById('xlsx-status');
+  const skipEl  = document.getElementById('xlsx-skipped');
+  if (preview) preview.style.display = '';
+  if (countEl) countEl.textContent = `— ${parsed.length} holding${parsed.length!==1?'s':''}`;
+
+  const acctColor = { Taxable: 'var(--taxable-color)', Traditional: 'var(--trad-color)', Roth: 'var(--roth-color)' };
+
+  let tbl = `<thead><tr>
+    <th>Symbol</th><th>Name</th><th>Balance</th><th>ER %</th><th>Broker</th>
+    <th>Original Location</th><th>Maps to</th>
+  </tr></thead><tbody>`;
+  parsed.forEach(r => {
+    tbl += `<tr>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent);font-weight:600;">${escHtml(r.ticker)||'—'}</td>
+      <td style="font-size:12px;">${escHtml(r.fundName)}</td>
+      <td style="font-family:'DM Mono',monospace;">${fmtD(r.value)}</td>
+      <td style="font-family:'DM Mono',monospace;">${r.er.toFixed(2)}%</td>
+      <td style="font-size:12px;color:var(--muted);">${escHtml(r.broker)||'—'}</td>
+      <td style="font-size:12px;color:var(--muted);">${escHtml(r.origLoc)}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;color:${acctColor[r.acct]||'var(--text)'};">${r.acct}</td>
+    </tr>`;
+  });
+  tbl += '</tbody>';
+  document.getElementById('xlsx-preview-table').innerHTML = tbl;
+
+  if (skipped.length) {
+    skipEl.textContent = `Skipped: ${skipped.join(' · ')}`;
+  } else {
+    skipEl.textContent = '';
+  }
+
+  const totTax = parsed.filter(r=>r.acct==='Taxable').reduce((s,r)=>s+r.value,0);
+  const totTrd = parsed.filter(r=>r.acct==='Traditional').reduce((s,r)=>s+r.value,0);
+  const totRth = parsed.filter(r=>r.acct==='Roth').reduce((s,r)=>s+r.value,0);
+  if (statusEl) statusEl.textContent = `Taxable ${fmtM(totTax)} · Traditional ${fmtM(totTrd)} · Roth ${fmtM(totRth)}`;
+}
+
+function applyXlsxImport() {
+  if (!xlsxParsed.length) return;
+  customPort.holdings = xlsxParsed.map(r => ({...r, id: cpNextId()}));
+  setPortfolioMode('custom');
+  cpRenderHoldings();
+  cpRenderStats();
+  const st = document.getElementById('cp-activate-status');
+  if (st) { st.textContent = `${customPort.holdings.length} holdings imported ✓`; setTimeout(()=>st.textContent='', 4000); }
 }
 
 /* ═══ HOW TO USE FAQ TOGGLE ═══ */
