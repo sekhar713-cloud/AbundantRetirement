@@ -4388,20 +4388,35 @@ const PG_CACHE = {};
 
 async function pgFetchHistory(ticker) {
   if (ticker in PG_CACHE) return PG_CACHE[ticker];
+  /* Use range=1y so we get Dec 31 of last year as the true YTD baseline */
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y&includePrePost=false`;
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=ytd&includePrePost=false&events=`;
     const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+    if (!resp.ok) { PG_CACHE[ticker] = null; return null; }
     const json = await resp.json();
     const r = json?.chart?.result?.[0];
     if (!r) { PG_CACHE[ticker] = null; return null; }
-    const ts     = r.timestamp || [];
-    const closes = r.indicators?.quote?.[0]?.close || [];
-    /* Fill any null closes with previous value */
-    for (let i = 1; i < closes.length; i++) if (closes[i] == null) closes[i] = closes[i-1];
-    const result = { timestamps: ts, closes };
+
+    const ts  = r.timestamp || [];
+    /* Prefer adjclose (handles dividends & splits); fall back to raw close */
+    const raw = r.indicators?.adjclose?.[0]?.adjclose || r.indicators?.quote?.[0]?.close || [];
+
+    /* Defensive copy and fill nulls: forward then backward */
+    const closes = [...raw];
+    for (let i = 1; i < closes.length; i++)           if (!closes[i])   closes[i] = closes[i-1];
+    for (let i = closes.length - 2; i >= 0; i--)      if (!closes[i])   closes[i] = closes[i+1];
+
+    /* Find the last week BEFORE Jan 1 of current year — that's the YTD baseline */
+    const jan1 = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
+    let baseIdx = 0;
+    for (let i = 0; i < ts.length; i++) { if (ts[i] < jan1) baseIdx = i; else break; }
+
+    /* Slice from baseIdx so closes[0] = Dec 31 close, rest = weekly YTD data */
+    const result = { timestamps: ts.slice(baseIdx), closes: closes.slice(baseIdx) };
     PG_CACHE[ticker] = result;
     return result;
-  } catch {
+  } catch(e) {
+    console.warn('pgFetch failed for', ticker, e?.message);
     PG_CACHE[ticker] = null;
     return null;
   }
@@ -4468,57 +4483,63 @@ async function buildGrowthTab(forceRefresh) {
   const rowData = holdings.map(h => {
     const d = h.ticker ? hist[h.ticker] : null;
     let weekPct = null, ytdPct = null, weekDelta = 0, ytdDelta = 0, curVal = h.value;
+    let live = false;
 
-    if (d && d.closes.length >= 2) {
-      const first = d.closes[0];
-      const last  = d.closes[d.closes.length - 1];
-      const prev  = d.closes[d.closes.length - 2];
-      if (first && last && prev) {
-        ytdPct   = (last - first) / first * 100;
-        weekPct  = (last - prev) / prev * 100;
-        /* Scale imported value back to Jan-1 start, then forward to now */
-        const jan1Val = h.value / (1 + ytdPct / 100);
-        ytdDelta  = h.value - jan1Val;
-        const prevVal = jan1Val * (prev / first);
+    if (d && d.closes.length >= 3) {
+      /* closes[0] = Dec 31 baseline, closes[last] = most recent weekly close */
+      const base = d.closes[0];                       /* YTD baseline (Dec 31) */
+      const last = d.closes[d.closes.length - 1];    /* latest complete week   */
+      const prev = d.closes[d.closes.length - 2];    /* one week prior         */
+
+      if (base > 0 && last > 0 && prev > 0) {
+        ytdPct  = (last - base) / base * 100;
+        weekPct = (last - prev) / prev * 100;
+
+        /* h.value is the imported balance — treat it as the value at 'last' price.
+           Scale backward to get baseline value, then compute deltas. */
+        const baseVal = h.value * (base / last);   /* estimated Jan 1 value   */
+        const prevVal = h.value * (prev / last);   /* estimated prev-week value */
+        ytdDelta  = h.value - baseVal;
         weekDelta = h.value - prevVal;
         curVal    = h.value;
+        live      = true;
       }
-    } else {
-      /* No price data — estimate from annual return */
-      const annRet = h.estRet || (catEstRet[h.cat] || 0.085);
-      weekPct   = (Math.pow(1 + annRet, 1/52) - 1) * 100;
-      const weeksElapsed = Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1)) / (7*86400*1000)));
-      ytdPct    = (Math.pow(1 + annRet, weeksElapsed/52) - 1) * 100;
-      weekDelta = h.value * weekPct / 100;
-      ytdDelta  = h.value / (1 + ytdPct/100) * (ytdPct/100);
     }
 
-    return { ...h, weekPct, ytdPct, weekDelta, ytdDelta, curVal, live: !!(d && d.closes.length >= 2) };
+    if (!live) {
+      /* No price data — estimate from annual return */
+      const annRet = (h.estRet != null && h.estRet > 0) ? h.estRet : (catEstRet[h.cat] || 0.085);
+      const weeksElapsed = Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 86400 * 1000)));
+      weekPct   = (Math.pow(1 + annRet, 1 / 52) - 1) * 100;
+      ytdPct    = (Math.pow(1 + annRet, weeksElapsed / 52) - 1) * 100;
+      weekDelta = h.value * weekPct / 100;
+      ytdDelta  = h.value * ytdPct / 100;
+    }
+
+    return { ...h, weekPct, ytdPct, weekDelta, ytdDelta, curVal, live };
   });
 
-  /* Build weekly portfolio value series */
-  /* For each week index: sum estimated portfolio value */
+  /* Build weekly portfolio value series
+     For each week w: scale each holding's current value by (closes[w] / closes[last]) */
   const weeklyTotals = [];
   for (let w = 0; w < nWeeks; w++) {
     let total = 0;
     holdings.forEach(h => {
       const d = h.ticker ? hist[h.ticker] : null;
-      if (d && d.closes.length > 0) {
-        const first = d.closes[0];
-        /* Find closest close for week w — some tickers may have fewer weeks */
-        const wi    = Math.min(w, d.closes.length - 1);
-        const close = d.closes[wi];
-        if (first && close) {
-          const weekReturn = (close - first) / first;
-          const jan1Val    = h.value / (1 + (d.closes[d.closes.length-1] - first) / first);
-          total += jan1Val * (1 + weekReturn);
+      if (d && d.closes.length >= 3) {
+        const lastClose = d.closes[d.closes.length - 1];
+        const wi        = Math.min(w, d.closes.length - 1);
+        const wClose    = d.closes[wi];
+        if (lastClose > 0 && wClose > 0) {
+          total += h.value * (wClose / lastClose);
         } else {
           total += h.value;
         }
       } else {
-        /* Estimated — linear growth per week */
-        const annRet = h.estRet || (catEstRet[h.cat] || 0.085);
-        total += h.value * Math.pow(1 + annRet, (w - nWeeks + 1) / 52);
+        /* Estimated — compound weekly from start of year */
+        const annRet = (h.estRet != null && h.estRet > 0) ? h.estRet : (catEstRet[h.cat] || 0.085);
+        const weeksFromNow = w - nWeeks + 1;   /* negative = in the past */
+        total += h.value * Math.pow(1 + annRet, weeksFromNow / 52);
       }
     });
     weeklyTotals.push(total);
@@ -4619,15 +4640,16 @@ async function buildGrowthTab(forceRefresh) {
   const lu = document.getElementById('pg-last-updated');
   if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
 
-  /* Draw chart */
-  pgDrawChart(weekLabels, weeklyTotals);
+  /* Defer chart until browser has finished laying out the canvas */
+  requestAnimationFrame(() => requestAnimationFrame(() => pgDrawChart(weekLabels, weeklyTotals)));
 }
 
 function pgDrawChart(labels, values) {
   const canvas = document.getElementById('pg-canvas');
   if (!canvas || !values.length) return;
-  const W = canvas.parentElement.clientWidth - 32 || 800;
-  const H = 220;
+  const container = canvas.closest('#pg-chart-wrap') || canvas.parentElement;
+  const W = Math.max(container.clientWidth - 32, 400);
+  const H = 240;
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
   const pad = { top: 16, right: 16, bot: 32, left: 80 };
