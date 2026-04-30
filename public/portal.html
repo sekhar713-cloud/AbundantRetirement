@@ -1391,12 +1391,12 @@ function dcpRefreshSummary() {
       Balance grows at ${(ret*100).toFixed(1)}% between draws. All distributions are ordinary income.
     </div>`;
 
-  /* Also update the DCP card in portfolio metrics if visible */
-  const dcpCard = document.getElementById('dcp-overview-card');
-  if (dcpCard) dcpCard.innerHTML = `
-    <div class="label" style="color:var(--dcp-color);">DCP at retirement</div>
-    <div style="font-size:22px;font-weight:600;color:var(--dcp-color);">${fmtM(bal)}</div>
-    <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(ret*100).toFixed(1)}% blended · ${N}-yr payout</div>`;
+  /* Update DCP balance card in portfolio overview (shows current/initial balance) */
+  const dcpBalEl = document.getElementById('dcp-overview-balance');
+  if (dcpBalEl) dcpBalEl.textContent = fmtM(dcpTotal());
+  /* Keep p-total in sync when DCP data is present */
+  const pTotalEl = document.getElementById('p-total');
+  if (pTotalEl && dcpActive()) pTotalEl.textContent = fmtM(stateBase() + dcpTotal());
 }
 
 
@@ -1532,9 +1532,18 @@ function buildOverview() {
       ${acctCards}
       <div class="metric-card">
         <div class="label">Total starting</div>
-        <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(stateBase())}</div>
+        <div class="value accent3" id="p-total" style="font-size:20px;">${fmtM(stateBase() + (dcpActive() ? dcpTotal() : 0))}</div>
+        ${dcpActive() ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">incl. DCP ${fmtM(dcpTotal())}</div>` : ''}
       </div>
-      ${dcpActive() ? `<div class="metric-card" id="dcp-overview-card" style="border-color:var(--dcp-color)33;"></div>` : ''}
+      ${dcpActive() ? `
+        <div class="metric-card" style="border-color:var(--dcp-color)33;">
+          <div class="label" style="color:var(--dcp-color);display:flex;align-items:center;justify-content:space-between;">
+            DCP / NQDC
+            <span style="font-size:9px;background:var(--dcp-color)22;color:var(--dcp-color);padding:1px 5px;border-radius:3px;font-family:'DM Mono',monospace;">imported</span>
+          </div>
+          <div style="font-size:22px;font-weight:600;color:var(--dcp-color);margin-top:4px;" id="dcp-overview-balance">${fmtM(dcpTotal())}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(dcpReturnRate()*100).toFixed(1)}% blended · ${dcpFunds.filter(f=>f.value>0).length} funds</div>
+        </div>` : ''}
       ${isCustomActive ? `
         <div class="metric-card" style="border-color:var(--accent)33;">
           <div class="label">Active portfolio</div>
