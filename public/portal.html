@@ -2982,6 +2982,22 @@ function cpLookup(ticker) {
   return tickerDB[ticker.trim().toUpperCase()] || null;
 }
 
+/* Year-aware expected return for target-date funds.
+   Glide path: 2025 fund ≈ 40% stocks → ~5%; 2060 fund ≈ 90% stocks → ~8.4% */
+function tdEstRet(nameOrYear) {
+  const m = String(nameOrYear).match(/20([2-9]\d)/);
+  if (!m) return 0.068;
+  const yr = parseInt('20' + m[1]);
+  if (yr <= 2025) return 0.050;
+  if (yr <= 2030) return 0.058;
+  if (yr <= 2035) return 0.065;
+  if (yr <= 2040) return 0.070;
+  if (yr <= 2045) return 0.075;
+  if (yr <= 2050) return 0.080;
+  if (yr <= 2055) return 0.082;
+  return 0.084;
+}
+
 function cpComputeStats() {
   let taxable=0, traditional=0, roth=0, erSum=0, retSum=0, total=0;
   customPort.holdings.forEach(r => {
@@ -2990,7 +3006,8 @@ function cpComputeStats() {
     else if (r.acct === 'Traditional') traditional += v;
     else roth += v;
     erSum  += (r.er  || 0) * v;
-    retSum += (catEstRet[r.cat] || 0.085) * v;
+    /* r.estRet is set for target-date funds (year-aware); fall back to catEstRet */
+    retSum += (r.estRet || catEstRet[r.cat] || 0.085) * v;
     total  += v;
   });
   return {
@@ -3059,7 +3076,7 @@ function cpRenderHoldings() {
               : '<span class="cp-unknown">custom</span>';
       return `<tr>
         <td style="white-space:nowrap;">
-          <input class="cp-input cp-ticker" value="${r.ticker}" placeholder="VOO"
+          <input class="cp-input cp-ticker" value="${r.ticker}" placeholder="TICKER"
             style="width:68px;" maxlength="8"
             onblur="cpUpdateTicker(${r.id},this.value)"
             onkeydown="if(event.key==='Enter')this.blur()">
@@ -3157,9 +3174,10 @@ async function cpUpdateTicker(id, rawTicker) {
   const local = tickerDB[ticker];
   if (local) {
     if (!row.fundName || row.fundName === ticker) row.fundName = local.name;
-    row.er  = local.er;
-    row.div = local.div;
-    row.cat = local.cat;
+    row.er     = local.er;
+    row.div    = local.div;
+    row.cat    = local.cat;
+    row.estRet = local.cat === 'Target Date' ? tdEstRet(local.name) : (local.estRet || null);
     row._localKnown = true;
     row._yahooValidated = false;
     if (row.acct === 'Taxable' && local.loc && local.loc !== 'Taxable') row.acct = local.loc;
@@ -3991,26 +4009,38 @@ function parseXlsx(binary, fname) {
       const acct = mapLocation(loc);
       const db   = ticker ? (tickerDB[ticker] || null) : null;
 
-      /* Estimate category from Type column when fund is unknown */
-      const catFromType = type === 'ETF' ? 'US Large Blend'
-        : type === 'STOCK' ? 'Individual Stock'
-        : type === 'MUTUAL FUND' ? 'US Large Blend'
-        : type.includes('TARGET') || type.includes('DATE') ? 'Target Date'
-        : type === 'BOND' ? 'US Bonds'
+      /* Detect target-date from Type column OR fund name (covers "Mutual Fund" typed entries) */
+      const displayName = name || rawDesc || ticker;
+      const isTD = type.includes('TARGET') || type.includes('DATE') ||
+                   /target.?date|target.?ret|freedom|lifecycle|lifecycle|retire.*20[2-9]\d|20[2-9]\d.*retire/i.test(displayName);
+
+      const catFromType = type === 'ETF'    ? 'US Large Blend'
+        : type === 'STOCK'                  ? 'Individual Stock'
+        : isTD                              ? 'Target Date'
+        : type === 'MUTUAL FUND'            ? 'US Large Blend'
+        : type === 'BOND'                   ? 'US Bonds'
         : 'US Large Blend';
+
+      const resolvedCat = db ? db.cat : catFromType;
+
+      /* For target-date funds: compute year-aware expected return from the fund name */
+      const resolvedEstRet = resolvedCat === 'Target Date'
+        ? tdEstRet(displayName)
+        : (db ? db.estRet : null);
 
       xlsxParsed.push({
         id:          cpNextId(),
         ticker,
-        fundName:    name || rawDesc || (db ? db.name : ticker),
+        fundName:    displayName,
         acct,
         value:       bal,
         er:          db ? db.er : er,
         div:         db ? db.div : 1.5,
-        cat:         db ? db.cat : catFromType,
+        cat:         resolvedCat,
+        estRet:      resolvedEstRet,   /* null for non-TD funds → cpComputeStats falls back to catEstRet */
         broker,
         origLoc:     loc,
-        _localKnown: !!(ticker && db),   /* stamped at parse-time — no runtime lookup needed */
+        _localKnown: !!(ticker && db),
       });
     });
 
