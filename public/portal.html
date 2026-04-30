@@ -4382,37 +4382,61 @@ function applyXlsxImport() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   PORTFOLIO GROWTH TAB
+   LIVE PORTFOLIO TAB
+   Fetches 1 year of daily prices per ticker (range=1y&interval=1d).
+   Extracts three reference prices:
+     jan1Price  — first trading day on/after Jan 1 of current year
+     weekPrice  — last trading day on/before (today − 7 calendar days)
+     todayPrice — most recent trading day close
    ═══════════════════════════════════════════════════════════════════ */
 const PG_CACHE = {};
 
 async function pgFetchHistory(ticker) {
   if (ticker in PG_CACHE) return PG_CACHE[ticker];
-  /* Use range=1y so we get Dec 31 of last year as the true YTD baseline */
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=1y&includePrePost=false`;
+  /* Daily data for 1 year — gives us all three reference prices in one call */
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1y&includePrePost=false`;
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+    const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(9000) : undefined });
     if (!resp.ok) { PG_CACHE[ticker] = null; return null; }
     const json = await resp.json();
     const r = json?.chart?.result?.[0];
     if (!r) { PG_CACHE[ticker] = null; return null; }
 
     const ts  = r.timestamp || [];
-    /* Prefer adjclose (handles dividends & splits); fall back to raw close */
-    const raw = r.indicators?.adjclose?.[0]?.adjclose || r.indicators?.quote?.[0]?.close || [];
+    const raw = r.indicators?.adjclose?.[0]?.adjclose
+             || r.indicators?.quote?.[0]?.close
+             || [];
 
-    /* Defensive copy and fill nulls: forward then backward */
+    /* Fill nulls forward then backward */
     const closes = [...raw];
-    for (let i = 1; i < closes.length; i++)           if (!closes[i])   closes[i] = closes[i-1];
-    for (let i = closes.length - 2; i >= 0; i--)      if (!closes[i])   closes[i] = closes[i+1];
+    for (let i = 1; i < closes.length; i++)      if (!closes[i]) closes[i] = closes[i-1];
+    for (let i = closes.length-2; i >= 0; i--)   if (!closes[i]) closes[i] = closes[i+1];
+    if (!closes.length || !closes[0]) { PG_CACHE[ticker] = null; return null; }
 
-    /* Find the last week BEFORE Jan 1 of current year — that's the YTD baseline */
-    const jan1 = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
-    let baseIdx = 0;
-    for (let i = 0; i < ts.length; i++) { if (ts[i] < jan1) baseIdx = i; else break; }
+    const nowSec      = Date.now() / 1000;
+    const sevenAgoSec = nowSec - 7 * 86400;
+    const jan1Sec     = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
 
-    /* Slice from baseIdx so closes[0] = Dec 31 close, rest = weekly YTD data */
-    const result = { timestamps: ts.slice(baseIdx), closes: closes.slice(baseIdx) };
+    const fmtDate = sec => { const d = new Date(sec*1000); return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); };
+
+    /* today  = last available trading day */
+    const todayIdx   = closes.length - 1;
+    const todayPrice = closes[todayIdx];
+    const todayDate  = fmtDate(ts[todayIdx]);
+
+    /* 7d ago = last trading day on/before (today − 7 calendar days) */
+    let weekIdx = 0;
+    for (let i = 0; i < ts.length; i++) { if (ts[i] <= sevenAgoSec) weekIdx = i; }
+    const weekPrice = closes[weekIdx];
+    const weekDate  = fmtDate(ts[weekIdx]);
+
+    /* Jan 1  = first trading day on/after Jan 1 of current year */
+    let janIdx = todayIdx; /* fallback */
+    for (let i = 0; i < ts.length; i++) { if (ts[i] >= jan1Sec) { janIdx = i; break; } }
+    const janPrice = closes[janIdx];
+    const janDate  = fmtDate(ts[janIdx]);
+
+    const result = { todayPrice, todayDate, weekPrice, weekDate, janPrice, janDate, ts, closes };
     PG_CACHE[ticker] = result;
     return result;
   } catch(e) {
@@ -4422,26 +4446,26 @@ async function pgFetchHistory(ticker) {
   }
 }
 
-function pgFmt$(v)  { return (v>=0?'+':'')+fmtD(v); }
-function pgFmtPct(p){ return (p>=0?'+':'')+p.toFixed(2)+'%'; }
-function pgClass(v) { return v>0?'pg-gain':v<0?'pg-loss':'pg-flat'; }
+function pgFmt$(v)   { return (v >= 0 ? '+' : '') + fmtD(v); }
+function pgFmtPct(p) { return (p >= 0 ? '+' : '') + p.toFixed(2) + '%'; }
+function pgClass(v)  { return v > 0 ? 'pg-gain' : v < 0 ? 'pg-loss' : 'pg-flat'; }
+function pgFmtP(p)   { return p != null ? '$' + p.toFixed(2) : '—'; }
 
 async function buildGrowthTab(forceRefresh) {
   const el = document.getElementById('growth-content');
   if (!el) return;
 
-  /* Gather all holdings: custom portfolio + active DCP funds */
+  /* Collect all holdings + DCP funds */
   const holdings = customPort.holdings.map(h => ({
-    ticker:   h.ticker || '',
-    name:     h.fundName || h.ticker || '—',
-    acct:     h.acct,
-    value:    h.value || 0,
-    cat:      h.cat || '',
-    estRet:   h.estRet || null,
-    noTicker: !h.ticker,
+    ticker:  h.ticker || '',
+    name:    h.fundName || h.ticker || '—',
+    acct:    h.acct,
+    value:   h.value || 0,
+    cat:     h.cat   || '',
+    estRet:  h.estRet != null ? h.estRet : null,
   }));
   dcpFunds.filter(f => f.value > 0).forEach(f => {
-    holdings.push({ ticker: f.ticker, name: f.name, acct: 'DCP', value: f.value, cat: f.cat, estRet: f.ret, noTicker: false });
+    holdings.push({ ticker: f.ticker, name: f.name, acct: 'DCP', value: f.value, cat: f.cat, estRet: f.ret });
   });
 
   if (!holdings.length) {
@@ -4449,19 +4473,17 @@ async function buildGrowthTab(forceRefresh) {
     return;
   }
 
-  /* Show loading */
   const tickers = [...new Set(holdings.filter(h => h.ticker).map(h => h.ticker))];
+
   el.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
-    Fetching live prices for ${tickers.length} tickers…
-    <div style="margin-top:12px;background:var(--border);border-radius:4px;height:4px;width:240px;margin-left:auto;margin-right:auto;">
+    Fetching daily prices for ${tickers.length} tickers…
+    <div style="margin-top:12px;background:var(--border);border-radius:4px;height:4px;width:260px;margin:12px auto 0;">
       <div id="pg-prog-bar" style="height:4px;background:var(--accent3);border-radius:4px;width:0%;transition:width 0.3s;"></div>
     </div>
   </div>`;
 
-  /* Clear cache if forced */
   if (forceRefresh) tickers.forEach(t => delete PG_CACHE[t]);
 
-  /* Fetch all histories in parallel */
   let done = 0;
   const hist = {};
   await Promise.all(tickers.map(async t => {
@@ -4471,107 +4493,119 @@ async function buildGrowthTab(forceRefresh) {
     if (bar) bar.style.width = (done / tickers.length * 100).toFixed(0) + '%';
   }));
 
-  /* Compute per-holding stats */
-  /* Align all weeks: build a master week list from the ticker with most data */
-  let masterWeeks = [];
-  tickers.forEach(t => {
-    if (hist[t] && hist[t].timestamps.length > masterWeeks.length)
-      masterWeeks = hist[t].timestamps;
-  });
-  const nWeeks = masterWeeks.length;
+  /* ── Per-holding stats ── */
+  const nowSec      = Date.now() / 1000;
+  const sevenAgoSec = nowSec - 7 * 86400;
 
   const rowData = holdings.map(h => {
     const d = h.ticker ? hist[h.ticker] : null;
-    let weekPct = null, ytdPct = null, weekDelta = 0, ytdDelta = 0, curVal = h.value;
-    let live = false;
+    let weekPct = null, ytdPct = null, weekDelta = 0, ytdDelta = 0, live = false;
+    let todayPrice = null, weekPrice = null, janPrice = null;
+    let todayDate = '—', weekDate = '—', janDate = '—';
 
-    if (d && d.closes.length >= 3) {
-      /* closes[0] = Dec 31 baseline, closes[last] = most recent weekly close */
-      const base = d.closes[0];                       /* YTD baseline (Dec 31) */
-      const last = d.closes[d.closes.length - 1];    /* latest complete week   */
-      const prev = d.closes[d.closes.length - 2];    /* one week prior         */
+    if (d && d.todayPrice > 0 && d.weekPrice > 0 && d.janPrice > 0) {
+      todayPrice = d.todayPrice; todayDate = d.todayDate;
+      weekPrice  = d.weekPrice;  weekDate  = d.weekDate;
+      janPrice   = d.janPrice;   janDate   = d.janDate;
 
-      if (base > 0 && last > 0 && prev > 0) {
-        ytdPct  = (last - base) / base * 100;
-        weekPct = (last - prev) / prev * 100;
+      weekPct  = (todayPrice - weekPrice) / weekPrice * 100;
+      ytdPct   = (todayPrice - janPrice)  / janPrice  * 100;
 
-        /* h.value is the imported balance — treat it as the value at 'last' price.
-           Scale backward to get baseline value, then compute deltas. */
-        const baseVal = h.value * (base / last);   /* estimated Jan 1 value   */
-        const prevVal = h.value * (prev / last);   /* estimated prev-week value */
-        ytdDelta  = h.value - baseVal;
-        weekDelta = h.value - prevVal;
-        curVal    = h.value;
-        live      = true;
-      }
-    }
-
-    if (!live) {
-      /* No price data — estimate from annual return */
+      /* h.value is the balance at current (today) price.
+         Scale back to each reference date using price ratios. */
+      weekDelta = h.value * (todayPrice - weekPrice) / todayPrice;
+      ytdDelta  = h.value * (todayPrice - janPrice)  / todayPrice;
+      live = true;
+    } else {
+      /* Estimated from annual return */
       const annRet = (h.estRet != null && h.estRet > 0) ? h.estRet : (catEstRet[h.cat] || 0.085);
-      const weeksElapsed = Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 86400 * 1000)));
+      const weeksElapsed = Math.max(1, Math.floor(
+        (Date.now() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 86400 * 1000)));
       weekPct   = (Math.pow(1 + annRet, 1 / 52) - 1) * 100;
       ytdPct    = (Math.pow(1 + annRet, weeksElapsed / 52) - 1) * 100;
-      weekDelta = h.value * weekPct / 100;
-      ytdDelta  = h.value * ytdPct / 100;
+      weekDelta = h.value * weekPct  / 100;
+      ytdDelta  = h.value * ytdPct   / 100;
     }
 
-    return { ...h, weekPct, ytdPct, weekDelta, ytdDelta, curVal, live };
+    return { ...h, weekPct, ytdPct, weekDelta, ytdDelta, live,
+             todayPrice, weekPrice, janPrice, todayDate, weekDate, janDate };
   });
 
-  /* Build weekly portfolio value series
-     For each week w: scale each holding's current value by (closes[w] / closes[last]) */
-  const weeklyTotals = [];
-  for (let w = 0; w < nWeeks; w++) {
+  /* ── Weekly portfolio value series (for chart) ── */
+  /* Use the ticker with the most daily points as the x-axis */
+  let masterTs = [], masterTicker = '';
+  tickers.forEach(t => {
+    if (hist[t] && hist[t].ts.length > masterTs.length) { masterTs = hist[t].ts; masterTicker = t; }
+  });
+
+  /* Filter to YTD only */
+  const jan1Sec = new Date(new Date().getFullYear(), 0, 1).getTime() / 1000;
+  const ytdMask = masterTs.map((t, i) => i).filter(i => masterTs[i] >= jan1Sec);
+  const ytdTs   = ytdMask.map(i => masterTs[i]);
+
+  /* For each day in YTD, compute total portfolio value */
+  const chartValues = ytdTs.map(dayTs => {
     let total = 0;
     holdings.forEach(h => {
       const d = h.ticker ? hist[h.ticker] : null;
-      if (d && d.closes.length >= 3) {
-        const lastClose = d.closes[d.closes.length - 1];
-        const wi        = Math.min(w, d.closes.length - 1);
-        const wClose    = d.closes[wi];
-        if (lastClose > 0 && wClose > 0) {
-          total += h.value * (wClose / lastClose);
-        } else {
-          total += h.value;
-        }
+      if (d && d.todayPrice > 0) {
+        /* Find closest price on/before dayTs */
+        let ci = 0;
+        for (let i = 0; i < d.ts.length; i++) { if (d.ts[i] <= dayTs) ci = i; }
+        const dayPrice = d.closes[ci];
+        if (dayPrice > 0) total += h.value * (dayPrice / d.todayPrice);
+        else              total += h.value;
       } else {
-        /* Estimated — compound weekly from start of year */
         const annRet = (h.estRet != null && h.estRet > 0) ? h.estRet : (catEstRet[h.cat] || 0.085);
-        const weeksFromNow = w - nWeeks + 1;   /* negative = in the past */
-        total += h.value * Math.pow(1 + annRet, weeksFromNow / 52);
+        const daysFwd = (dayTs - nowSec) / 86400;
+        total += h.value * Math.pow(1 + annRet, daysFwd / 365);
       }
     });
-    weeklyTotals.push(total);
-  }
+    return total;
+  });
 
-  /* ── Render ── */
-  const acctColor = { Taxable: 'var(--taxable-color)', Traditional: 'var(--trad-color)', Roth: 'var(--roth-color)', DCP: 'var(--dcp-color)' };
-  const totValue = rowData.reduce((s, r) => s + r.curVal, 0);
-  const totWeek  = rowData.reduce((s, r) => s + r.weekDelta, 0);
-  const totYtd   = rowData.reduce((s, r) => s + r.ytdDelta, 0);
-  const totWeekPct = weeklyTotals.length >= 2 ? (weeklyTotals[weeklyTotals.length-1] - weeklyTotals[weeklyTotals.length-2]) / weeklyTotals[weeklyTotals.length-2] * 100 : 0;
-  const totYtdPct  = weeklyTotals.length >= 2 ? (weeklyTotals[weeklyTotals.length-1] - weeklyTotals[0]) / weeklyTotals[0] * 100 : 0;
+  const chartLabels = ytdTs.map(ts => {
+    const d = new Date(ts * 1000);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  });
 
+  /* ── Aggregates ── */
+  const acctColor = { Taxable:'var(--taxable-color)', Traditional:'var(--trad-color)', Roth:'var(--roth-color)', DCP:'var(--dcp-color)' };
+  const totValue   = rowData.reduce((s, r) => s + r.value, 0);
+  const totWeek$   = rowData.reduce((s, r) => s + r.weekDelta, 0);
+  const totYtd$    = rowData.reduce((s, r) => s + r.ytdDelta, 0);
+  const totWeekPct = totValue > 0 ? totWeek$ / (totValue - totWeek$) * 100 : 0;
+  const totYtdPct  = totValue > 0 ? totYtd$  / (totValue - totYtd$)  * 100 : 0;
+
+  /* ── Table rows ── */
   const tableRows = rowData.map(r => `
     <tr>
       <td style="font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;">${escHtml(r.ticker)||'—'}
         <span class="pg-badge${r.live?'':' pg-badge-est'}">${r.live?'live':'est'}</span>
       </td>
-      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.name)}">${escHtml(r.name)}</td>
+      <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.name)}">${escHtml(r.name)}</td>
       <td><span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${acctColor[r.acct]||'var(--border)'}22;color:${acctColor[r.acct]||'var(--muted)'};">${r.acct}</span></td>
-      <td style="font-family:'DM Mono',monospace;">${fmtD(r.curVal)}</td>
+      <td style="font-family:'DM Mono',monospace;">${fmtD(r.value)}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekDelta)}">${pgFmt$(r.weekDelta)}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekPct)}">${r.weekPct!=null?pgFmtPct(r.weekPct):'—'}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.ytdDelta)}">${pgFmt$(r.ytdDelta)}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.ytdPct)}">${r.ytdPct!=null?pgFmtPct(r.ytdPct):'—'}</td>
     </tr>`).join('');
 
-  /* Week labels */
-  const weekLabels = masterWeeks.map(ts => {
-    const d = new Date(ts * 1000);
-    return `${d.toLocaleString('default',{month:'short'})} ${d.getDate()}`;
-  });
+  /* ── Price basis table (shows the three reference prices per live ticker) ── */
+  const liveRows = rowData.filter(r => r.live);
+  const basisRows = liveRows.map(r => `
+    <tr>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;">${escHtml(r.ticker)}</td>
+      <td style="font-family:'DM Mono',monospace;">${pgFmtP(r.janPrice)}</td>
+      <td style="font-size:11px;color:var(--muted);">${r.janDate}</td>
+      <td style="font-family:'DM Mono',monospace;">${pgFmtP(r.weekPrice)}</td>
+      <td style="font-size:11px;color:var(--muted);">${r.weekDate}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;">${pgFmtP(r.todayPrice)}</td>
+      <td style="font-size:11px;color:var(--muted);">${r.todayDate}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekPct)}">${r.weekPct!=null?pgFmtPct(r.weekPct):'—'}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.ytdPct)}">${r.ytdPct!=null?pgFmtPct(r.ytdPct):'—'}</td>
+    </tr>`).join('');
 
   el.innerHTML = `
     <!-- Summary cards -->
@@ -4579,119 +4613,136 @@ async function buildGrowthTab(forceRefresh) {
       <div class="metric-card">
         <div class="label">Live Portfolio Value</div>
         <div class="value accent3" style="font-size:22px;">${fmtM(totValue)}</div>
-        <div class="sub">${holdings.length} holdings · as of ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+        <div class="sub">${holdings.length} holdings · ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
       </div>
       <div class="metric-card">
-        <div class="label">This Week Change</div>
-        <div style="font-size:22px;font-weight:600;" class="${pgClass(totWeek)}">${pgFmt$(totWeek)}</div>
+        <div class="label">7-Day Change</div>
+        <div style="font-size:22px;font-weight:600;" class="${pgClass(totWeek$)}">${pgFmt$(totWeek$)}</div>
         <div style="font-size:11px;" class="${pgClass(totWeekPct)}">${pgFmtPct(totWeekPct)}</div>
       </div>
       <div class="metric-card">
         <div class="label">YTD Gain / Loss</div>
-        <div style="font-size:22px;font-weight:600;" class="${pgClass(totYtd)}">${pgFmt$(totYtd)}</div>
+        <div style="font-size:22px;font-weight:600;" class="${pgClass(totYtd$)}">${pgFmt$(totYtd$)}</div>
         <div style="font-size:11px;" class="${pgClass(totYtdPct)}">${pgFmtPct(totYtdPct)}</div>
       </div>
       <div class="metric-card">
         <div class="label">Price Source</div>
-        <div class="value">${rowData.filter(r=>r.live).length} <span style="font-size:14px;color:var(--muted);">live</span></div>
+        <div class="value">${rowData.filter(r=>r.live).length}<span style="font-size:14px;color:var(--muted);"> live</span></div>
         <div class="sub">${rowData.filter(r=>!r.live).length} estimated · Yahoo Finance</div>
       </div>
     </div>
 
-    <!-- Weekly chart -->
-    <div class="pg-chart-wrap" id="pg-chart-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;">
-      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px;">Total Portfolio — Weekly Value (YTD)</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Live price returns from Yahoo Finance applied to imported balances · Jan 1 ${new Date().getFullYear()} → today</div>
+    <!-- YTD Chart -->
+    <div id="pg-chart-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;">
+      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:2px;">Total Portfolio — Daily Value YTD</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Jan 1 ${new Date().getFullYear()} → today · scaled from imported balances using daily price returns</div>
       <canvas id="pg-canvas" style="width:100%;display:block;"></canvas>
     </div>
 
-    <!-- Holdings table -->
-    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:10px;">Individual Holdings — Weekly &amp; YTD Changes</div>
+    <!-- Price basis -->
+    ${liveRows.length ? `
+    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:8px;">Price Basis — How Each % Was Calculated</div>
+    <div style="overflow-x:auto;margin-bottom:24px;">
+      <table id="pg-table" style="font-size:12px;">
+        <thead><tr>
+          <th style="text-align:left;">Ticker</th>
+          <th>Jan 1 Price</th><th style="color:var(--muted);">Date</th>
+          <th>7d Ago Price</th><th style="color:var(--muted);">Date</th>
+          <th>Today Price</th><th style="color:var(--muted);">Date</th>
+          <th>7d %</th><th>YTD %</th>
+        </tr></thead>
+        <tbody>${basisRows}</tbody>
+      </table>
+    </div>` : ''}
+
+    <!-- Holdings detail -->
+    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:8px;">Individual Holdings</div>
     <div style="overflow-x:auto;">
       <table id="pg-table">
         <thead><tr>
           <th style="text-align:left;">Ticker</th>
           <th style="text-align:left;">Fund</th>
           <th style="text-align:left;">Acct</th>
-          <th>Value</th>
-          <th>Week $</th>
-          <th>Week %</th>
-          <th>YTD $</th>
-          <th>YTD %</th>
+          <th>Balance</th>
+          <th>7d $</th><th>7d %</th>
+          <th>YTD $</th><th>YTD %</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
         <tfoot><tr>
           <td colspan="3">Total</td>
           <td style="font-family:'DM Mono',monospace;">${fmtD(totValue)}</td>
-          <td class="${pgClass(totWeek)}">${pgFmt$(totWeek)}</td>
+          <td class="${pgClass(totWeek$)}">${pgFmt$(totWeek$)}</td>
           <td class="${pgClass(totWeekPct)}">${pgFmtPct(totWeekPct)}</td>
-          <td class="${pgClass(totYtd)}">${pgFmt$(totYtd)}</td>
+          <td class="${pgClass(totYtd$)}">${pgFmt$(totYtd$)}</td>
           <td class="${pgClass(totYtdPct)}">${pgFmtPct(totYtdPct)}</td>
         </tr></tfoot>
       </table>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;">
-      <strong>How values are calculated:</strong> Yahoo Finance weekly closing prices are applied proportionally to your imported dollar balances.
-      Weekly change = last close vs. prior week close. YTD change = last close vs. Jan 1 close.
-      Institutional / no-ticker funds (marked <em>est</em>) use category-level annual return estimates.
+    <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.7;">
+      <strong>Calculation:</strong>
+      7d % = (Today Price − 7d Ago Price) / 7d Ago Price · 
+      YTD % = (Today Price − Jan 1 Price) / Jan 1 Price ·
+      $ change = Balance × price return · 
+      Prices from Yahoo Finance daily closes (dividend-adjusted).
+      Estimated (<em>est</em>) funds use category annual return.
     </div>`;
 
-  /* Update last-refreshed timestamp */
   const lu = document.getElementById('pg-last-updated');
   if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
 
-  /* Defer chart until browser has finished laying out the canvas */
-  requestAnimationFrame(() => requestAnimationFrame(() => pgDrawChart(weekLabels, weeklyTotals)));
+  requestAnimationFrame(() => requestAnimationFrame(() => pgDrawChart(chartLabels, chartValues)));
 }
 
 function pgDrawChart(labels, values) {
   const canvas = document.getElementById('pg-canvas');
   if (!canvas || !values.length) return;
-  const container = canvas.closest('#pg-chart-wrap') || canvas.parentElement;
-  const W = Math.max(container.clientWidth - 32, 400);
+  const wrap = document.getElementById('pg-chart-wrap');
+  const W = Math.max((wrap ? wrap.clientWidth : 800) - 32, 400);
   const H = 240;
-  canvas.width = W; canvas.height = H;
+  canvas.width  = W;
+  canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const pad = { top: 16, right: 16, bot: 32, left: 80 };
-  const cW = W - pad.left - pad.right;
-  const cH = H - pad.top - pad.bot;
-  const minV = Math.min(...values) * 0.998;
-  const maxV = Math.max(...values) * 1.002;
-  const xP = i => pad.left + (i / Math.max(values.length - 1, 1)) * cW;
-  const yP = v => pad.top + cH - ((v - minV) / (maxV - minV)) * cH;
+  const pad = { top:18, right:20, bot:32, left:88 };
+  const cW  = W - pad.left - pad.right;
+  const cH  = H - pad.top  - pad.bot;
 
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#1a2540';
+  const minV = Math.min(...values) * 0.997;
+  const maxV = Math.max(...values) * 1.003;
+  const xP   = i => pad.left + (i / Math.max(values.length - 1, 1)) * cW;
+  const yP   = v => pad.top  + cH - ((v - minV) / (maxV - minV || 1)) * cH;
+
+  /* Background */
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#131e35';
   ctx.fillRect(0, 0, W, H);
 
-  /* Grid lines */
-  const nGrid = 4;
-  for (let i = 0; i <= nGrid; i++) {
-    const v = minV + (maxV - minV) * i / nGrid;
+  /* Horizontal grid + Y labels */
+  for (let i = 0; i <= 4; i++) {
+    const v = minV + (maxV - minV) * i / 4;
     const y = yP(v);
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
     ctx.fillStyle = '#6B7280'; ctx.font = '9px DM Mono,monospace'; ctx.textAlign = 'right';
-    ctx.fillText(fmtM(v), pad.left - 5, y + 3);
+    ctx.fillText(fmtM(v), pad.left - 4, y + 3);
   }
 
-  /* X-axis labels — show ~6 evenly spaced */
-  const step = Math.ceil(labels.length / 6);
+  /* X-axis labels — ~8 evenly spaced */
+  const step = Math.max(1, Math.ceil(labels.length / 8));
   labels.forEach((lbl, i) => {
     if (i % step !== 0 && i !== labels.length - 1) return;
     ctx.fillStyle = '#6B7280'; ctx.font = '9px DM Mono,monospace'; ctx.textAlign = 'center';
-    ctx.fillText(lbl, xP(i), H - pad.bot + 12);
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 0.5;
+    ctx.fillText(lbl, xP(i), H - pad.bot + 13);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)'; ctx.lineWidth = 0.5;
     ctx.beginPath(); ctx.moveTo(xP(i), pad.top); ctx.lineTo(xP(i), H - pad.bot); ctx.stroke();
   });
 
-  /* Area fill */
+  /* Gradient area */
+  const isUp = values[values.length-1] >= values[0];
   const grad = ctx.createLinearGradient(0, pad.top, 0, H - pad.bot);
-  const isUp = values[values.length - 1] >= values[0];
-  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)');
+  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)');
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.beginPath();
   values.forEach((v, i) => i === 0 ? ctx.moveTo(xP(i), yP(v)) : ctx.lineTo(xP(i), yP(v)));
-  ctx.lineTo(xP(values.length - 1), H - pad.bot);
+  ctx.lineTo(xP(values.length-1), H - pad.bot);
   ctx.lineTo(xP(0), H - pad.bot);
   ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
 
@@ -4701,13 +4752,11 @@ function pgDrawChart(labels, values) {
   ctx.strokeStyle = isUp ? '#22c55e' : '#ef4444';
   ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
 
-  /* Current value dot */
-  const last = values.length - 1;
-  ctx.beginPath();
-  ctx.arc(xP(last), yP(values[last]), 4, 0, Math.PI * 2);
+  /* End dot */
+  const li = values.length - 1;
+  ctx.beginPath(); ctx.arc(xP(li), yP(values[li]), 4, 0, Math.PI*2);
   ctx.fillStyle = isUp ? '#22c55e' : '#ef4444'; ctx.fill();
 }
-
 /* ═══ HOW TO USE FAQ TOGGLE ═══ */
 function htToggle(btn) {
   const item = btn.closest('.ht-faq-item');
