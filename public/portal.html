@@ -472,19 +472,10 @@ body {
 
     <!-- ── Section 2: DCP (V2) ───────────────────────────── -->
     <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border);">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0;">
-        <div class="section-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">Deferred Compensation Plan <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--dcp-color);font-weight:400;letter-spacing:0.04em;">(DCP / NQDC)</span></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);cursor:pointer;">
-          <input type="checkbox" id="dcp-enabled" onchange="
-            document.getElementById('dcp-section-body').style.display=this.checked?'block':'none';
-            if(this.checked){buildDcpSection();}else{dcpFunds.forEach(f=>f.value=0);dcpState.annualContrib=0;updateRetirement();}
-          " style="accent-color:var(--dcp-color);">
-          <span>Enable DCP</span>
-        </label>
+      <div class="section-title" style="margin-bottom:16px;border-bottom:none;padding-bottom:0;">
+        Deferred Compensation Plan <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--dcp-color);font-weight:400;letter-spacing:0.04em;">(DCP / NQDC)</span>
       </div>
-      <div id="dcp-section-body" style="display:none;margin-top:20px;">
-        <div id="dcp-section-content"></div>
-      </div>
+      <div id="dcp-section-content"></div>
     </div>
 
     <!-- ── Section 3: Accumulation ─────────────────────── -->
@@ -1244,25 +1235,51 @@ function dcpPayoutStartAge() { return dcpState.payoutStartAge || state.retireAge
 function buildDcpSection() {
   const el = document.getElementById('dcp-section-content');
   if (!el) return;
-  const total = dcpTotal();
+  const total    = dcpTotal();
   const blendRet = dcpReturnRate();
 
-  el.innerHTML = `
-    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7;">
-      Enter your current DCP balance by fund. The blended return drives accumulation.
-      Payouts follow a declining-divisor schedule — fully taxed as ordinary income in the year received.
-      If DCP balance is $0 and annual contribution is $0, DCP has no effect on any projections.
-    </p>
+  /* No data yet — show import prompt */
+  if (total === 0) {
+    el.innerHTML = `
+      <div style="padding:24px 16px;border:1px dashed rgba(107,70,193,0.35);border-radius:8px;text-align:center;color:var(--muted);">
+        <div style="font-size:28px;margin-bottom:8px;">📂</div>
+        <div style="font-size:13px;font-weight:600;color:var(--dcp-color);margin-bottom:4px;">No DCP data imported</div>
+        <div style="font-size:12px;line-height:1.6;">
+          Upload a portfolio spreadsheet that includes rows with <em>Location</em> or <em>Broker</em> set to
+          <strong>DCP</strong>, <strong>Deferred Compensation</strong>, or <strong>NQDC</strong>.<br>
+          Balances and fund proportions will be pulled automatically.
+        </div>
+      </div>`;
+    return;
+  }
 
+  /* Fund rows — read-only, proportions from import */
+  const fundRows = dcpFunds.filter(f => f.value > 0).map(f => {
+    const wt = (f.value / total * 100).toFixed(1);
+    const bar = `<div style="height:4px;border-radius:2px;background:var(--dcp-color);width:${wt}%;opacity:0.7;margin-top:3px;"></div>`;
+    return `<tr>
+      <td style="font-size:12px;">${f.name}</td>
+      <td class="ticker" style="color:var(--dcp-color);">${f.ticker}</td>
+      <td style="font-size:12px;color:var(--muted);">${f.cat}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--muted);">${(f.ret*100).toFixed(1)}%</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;">${fmtD(f.value)}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);">${wt}%${bar}</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
     <div class="v3-grid2" style="margin-bottom:20px;">
       <div class="alpha-card">
-        <div style="font-size:12px;font-weight:600;color:var(--dcp-color);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Annual Contribution</div>
+        <div style="font-size:12px;font-weight:600;color:var(--dcp-color);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Annual New Contribution</div>
         <div class="input-group" style="margin-bottom:0;">
-          <label>DCP contribution per year (pre-retirement)</label>
+          <label>Amount added to DCP per year (pre-retirement)</label>
           <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span>
-            <input type="number" class="v3-input" id="dcp-contrib-input" value="${dcpState.annualContrib}"
-              min="0" step="5000" style="width:140px;"
-              oninput="dcpState.annualContrib=+this.value;dcpRefreshSummary();updateRetirement();">
+            <input type="number" class="v3-input" id="dcp-contrib-input" value="${dcpState.annualContrib||''}"
+              min="0" step="5000" style="width:140px;" placeholder="0"
+              oninput="dcpState.annualContrib=+this.value||0;dcpRefreshSummary();updateRetirement();">
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+            New contributions follow the same fund proportions as your current balance.
           </div>
         </div>
       </div>
@@ -1288,52 +1305,26 @@ function buildDcpSection() {
       </div>
     </div>
 
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
-      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;">DCP Fund Allocation</div>
-      <button class="v3-btn-sm" onclick="dcpEqualWeight()" title="Distribute 100% equally across all funds"
-        style="font-size:11px;padding:3px 10px;background:transparent;border:1px solid var(--dcp-color);color:var(--dcp-color);border-radius:4px;cursor:pointer;">
-        ⚖ Equal weight
-      </button>
+    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:10px;">
+      Imported DCP Holdings
+      <span style="font-size:11px;font-family:'DM Mono',monospace;font-weight:400;color:var(--muted);margin-left:8px;">proportions auto-applied to new contributions</span>
     </div>
-    <table class="fund-table" style="margin-bottom:8px;">
+    <table class="fund-table" style="margin-bottom:16px;">
       <thead><tr>
         <th>Fund</th><th>Ticker</th><th>Category</th>
         <th style="color:var(--muted);">Est. Return</th>
-        <th style="color:var(--dcp-color);">Your Balance ($)</th>
-        <th>Bal. Weight</th>
-        <th style="color:var(--accent3);">Contrib Alloc %</th>
+        <th style="color:var(--dcp-color);">Balance</th>
+        <th>Portfolio %</th>
       </tr></thead>
-      <tbody>
-        ${dcpFunds.map((f,i) => {
-          const wt = total > 0 ? (f.value/total*100) : 0;
-          return `<tr>
-            <td style="font-size:12px;">${f.name}</td>
-            <td class="ticker" style="color:var(--dcp-color);">${f.ticker}</td>
-            <td style="font-size:12px;color:var(--muted);">${f.cat}</td>
-            <td style="font-family:'DM Mono',monospace;color:var(--muted);">${(f.ret*100).toFixed(1)}%</td>
-            <td><input type="number" class="v3-input" value="${f.value||''}" placeholder="0"
-              min="0" step="1000" style="width:130px;text-align:right;"
-              oninput="dcpFunds[${i}].value=+this.value||0;dcpRefreshSummary();updateRetirement();"
-              onkeydown="if(event.key==='Enter')this.blur()"></td>
-            <td style="font-family:'DM Mono',monospace;color:${wt>0?'var(--dcp-color)':'var(--muted)'};">${wt>0?wt.toFixed(1)+'%':'—'}</td>
-            <td><input type="number" class="v3-input dcp-alloc-input" value="${f.alloc||''}" placeholder="0"
-              min="0" max="100" step="5" style="width:80px;text-align:right;"
-              oninput="dcpFunds[${i}].alloc=+this.value||0;dcpRefreshSummary();updateRetirement();"
-              onkeydown="if(event.key==='Enter')this.blur()"></td>
-          </tr>`;
-        }).join('')}
-      </tbody>
+      <tbody>${fundRows}</tbody>
       <tfoot>
         <tr style="border-top:2px solid var(--border);font-weight:700;">
-          <td colspan="3" style="color:var(--muted);">Total DCP Balance</td>
-          <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);" id="dcp-blend-ret">${(blendRet*100).toFixed(1)}% blended</td>
+          <td colspan="4" style="font-family:'DM Mono',monospace;color:var(--dcp-color);" id="dcp-blend-ret">${(blendRet*100).toFixed(1)}% blended return</td>
           <td style="font-family:'DM Mono',monospace;color:var(--dcp-color);font-size:16px;" id="dcp-total-cell">${fmtD(total)}</td>
-          <td></td>
-          <td style="font-family:'DM Mono',monospace;font-size:13px;" id="dcp-alloc-total-cell">—</td>
+          <td>100%</td>
         </tr>
       </tfoot>
     </table>
-    <div id="dcp-alloc-bar" style="margin-bottom:16px;"></div>
 
     <div id="dcp-payout-preview"></div>`;
 
@@ -1351,54 +1342,18 @@ function dcpRefreshSummary() {
   totalEl.textContent = fmtD(total);
   if (blendEl) blendEl.textContent = (ret*100).toFixed(1)+'% blended';
 
-  /* Weight + alloc column update */
-  const allocTot = dcpAllocTotal();
-  const cRet = dcpContribReturnRate();
-  dcpFunds.forEach((f,i) => {
+  /* Read-only weight cells — rebuild from current values */
+  const visibleRows = document.querySelectorAll('#dcp-section-content table tbody tr');
+  const activeFunds = dcpFunds.filter(f => f.value > 0);
+  activeFunds.forEach((f, i) => {
     const wt = total > 0 ? f.value/total*100 : 0;
-    const rows = document.querySelectorAll('#dcp-section-content table tbody tr');
-    if (rows[i]) {
-      const wtCell = rows[i].cells[5];
-      if (wtCell) { wtCell.textContent = wt>0?wt.toFixed(1)+'%':'—'; wtCell.style.color = wt>0?'var(--dcp-color)':'var(--muted)'; }
+    if (visibleRows[i]) {
+      const wtCell = visibleRows[i].cells[5];
+      if (wtCell) wtCell.innerHTML = wt.toFixed(1)+'%<div style="height:4px;border-radius:2px;background:var(--dcp-color);width:'+wt.toFixed(1)+'%;opacity:0.7;margin-top:3px;"></div>';
+      const balCell = visibleRows[i].cells[4];
+      if (balCell) balCell.textContent = fmtD(f.value);
     }
   });
-
-  /* Alloc total footer cell */
-  const allocTotEl = document.getElementById('dcp-alloc-total-cell');
-  if (allocTotEl) {
-    if (allocTot === 0) {
-      allocTotEl.textContent = '—';
-      allocTotEl.style.color = 'var(--muted)';
-      allocTotEl.title = 'No contribution allocation set — using balance weights';
-    } else {
-      const ok = Math.abs(allocTot - 100) < 0.01;
-      allocTotEl.textContent = allocTot.toFixed(0) + '%' + (ok ? ' ✓' : ' ✗');
-      allocTotEl.style.color = ok ? 'var(--accent3)' : 'var(--danger)';
-      allocTotEl.title = ok
-        ? `Contrib return: ${(cRet*100).toFixed(2)}% blended`
-        : `Must sum to 100% (currently ${allocTot.toFixed(0)}%)`;
-    }
-  }
-
-  /* Allocation bar */
-  const barEl = document.getElementById('dcp-alloc-bar');
-  if (barEl) {
-    if (allocTot === 0) {
-      barEl.innerHTML = '';
-    } else {
-      const ok = Math.abs(allocTot - 100) < 0.01;
-      const segments = dcpFunds.filter(f => f.alloc > 0).map((f,_,arr) => {
-        const pct = (f.alloc / Math.max(allocTot, 1) * 100).toFixed(2);
-        return `<div title="${f.name}: ${f.alloc}%" style="flex:${pct};background:var(--dcp-color);opacity:${0.4+0.6*f.alloc/100};height:8px;border-radius:2px;margin-right:1px;"></div>`;
-      }).join('');
-      barEl.innerHTML = `
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-          <div style="flex:1;display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--border);">${segments}</div>
-          <div style="font-size:11px;font-family:'DM Mono',monospace;color:${ok?'var(--accent3)':'var(--danger)'};">${(cRet*100).toFixed(2)}% contrib CAGR</div>
-        </div>
-        ${!ok?`<div style="font-size:11px;color:var(--danger);margin-top:2px;">⚠ Allocation sums to ${allocTot.toFixed(0)}% — must equal 100% to use these weights</div>`:''}`;
-    }
-  }
 
   if (!prevEl || !dcpActive()) { if (prevEl) prevEl.innerHTML=''; return; }
 
@@ -1444,18 +1399,6 @@ function dcpRefreshSummary() {
     <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(ret*100).toFixed(1)}% blended · ${N}-yr payout</div>`;
 }
 
-function dcpEqualWeight() {
-  const n = dcpFunds.length;
-  const each = Math.round(100 / n);
-  dcpFunds.forEach((f, i) => { f.alloc = (i === n-1) ? 100 - each*(n-1) : each; });
-  /* sync inputs */
-  document.querySelectorAll('#dcp-section-content table tbody tr').forEach((row, i) => {
-    const inp = row.querySelector('.dcp-alloc-input');
-    if (inp) inp.value = dcpFunds[i] ? (dcpFunds[i].alloc || '') : '';
-  });
-  dcpRefreshSummary();
-  updateRetirement();
-}
 
 /* ═══════════════════════════════════════════════════════════════════
    V1 STATIC DATA
@@ -2778,8 +2721,7 @@ function importData(file) {
           if (d.dcp.state.payoutYears    != null) dcpState.payoutYears    = d.dcp.state.payoutYears;
           if (d.dcp.state.payoutStartAge != null) dcpState.payoutStartAge = d.dcp.state.payoutStartAge;
         }
-        const dcpEl = document.getElementById('dcp-enable');
-        if (dcpEl && dcpActive()) { dcpEl.checked = true; buildDcpSection(); }
+        buildDcpSection();
       }
       buildOverview();
       buildLocation();
@@ -4244,29 +4186,21 @@ function renderXlsxPreview(parsed, skipped, fname) {
       <div style="font-size:12px;font-weight:700;color:var(--dcp-color);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px;font-family:'DM Mono',monospace;">
         DCP / NQDC Detected — ${xlsxDcpRows.length} fund${xlsxDcpRows.length!==1?'s':''} · ${fmtD(dcpTotal)} total
       </div>
-      <table class="fund-table" style="margin-bottom:12px;">
-        <thead><tr><th>Ticker</th><th>Fund Name</th><th>Balance</th><th>Mapped to DCP Fund</th></tr></thead>
+      <table class="fund-table" style="margin-bottom:14px;">
+        <thead><tr><th>Ticker</th><th>Fund Name</th><th>Balance</th><th>Maps to</th></tr></thead>
         <tbody>${dcpRows}</tbody>
       </table>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-        <div>
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Payout starts at age</label>
-          <input type="number" id="xlsx-dcp-start-age" class="v3-input" min="40" max="80"
-            placeholder="${state.retireAge} (retirement age)" value=""
-            style="width:100%;font-size:13px;">
-        </div>
-        <div>
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Distribution period</label>
-          <select id="xlsx-dcp-payout-years" class="v3-input v3-select" style="width:100%;font-size:13px;">
-            <option value="1">Lump sum</option>
-            ${[3,4,5,6,7,8,9,10,11,12,13].map(n =>
-              `<option value="${n}" ${n===10?'selected':''}>${n}-year installments</option>`
-            ).join('')}
-          </select>
+      <div style="max-width:320px;">
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">Annual new contribution to DCP (pre-retirement)</label>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:var(--muted);font-family:'DM Mono',monospace;">$</span>
+          <input type="number" id="xlsx-dcp-annual-contrib" class="v3-input" min="0" step="5000"
+            placeholder="0" value="${dcpState.annualContrib||''}"
+            style="width:160px;font-size:13px;">
         </div>
       </div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px;">
-        These settings will auto-populate the DCP section when you click "Load into Holdings →"
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;">
+        Fund proportions are preserved automatically. Payout schedule can be set in the DCP section after import.
       </div>
     </div>`;
 }
@@ -4283,32 +4217,31 @@ function applyXlsxImport() {
   /* ── Auto-populate DCP from uploaded spreadsheet ── */
   if (xlsxDcpRows.length) {
     /* Read payout settings from the preview form before clearing */
-    const startAgeInp = document.getElementById('xlsx-dcp-start-age');
-    const payoutYrsEl = document.getElementById('xlsx-dcp-payout-years');
-    const startAge    = startAgeInp && startAgeInp.value ? +startAgeInp.value : null;
-    const payoutYears = payoutYrsEl ? +payoutYrsEl.value : 10;
+    /* Read annual contribution entered in the import preview */
+    const contribInp = document.getElementById('xlsx-dcp-annual-contrib');
+    if (contribInp && contribInp.value) dcpState.annualContrib = +contribInp.value;
 
     /* Reset existing DCP fund balances, then apply matched rows */
-    dcpFunds.forEach(f => { f.value = 0; });
+    dcpFunds.forEach(f => { f.value = 0; f.alloc = 0; });
     xlsxDcpRows.forEach(r => {
       const matched = matchDcpFund(r.ticker, r.name);
       if (matched) {
         matched.value += r.value;
       } else {
-        /* Unmatched: add to the first general fund (Institutional 500) as a catch-all */
+        /* Unmatched: add to Vanguard Institutional 500 as a catch-all */
         dcpFunds[0].value += r.value;
       }
     });
 
-    /* Apply payout settings */
-    if (startAge) dcpState.payoutStartAge = startAge;
-    dcpState.payoutYears = payoutYears;
+    /* Set alloc% = same proportions as imported balances so new contributions follow same split */
+    const dcpImportTotal = dcpTotal();
+    if (dcpImportTotal > 0) {
+      dcpFunds.forEach(f => { f.alloc = +(f.value / dcpImportTotal * 100).toFixed(2); });
+      /* Normalize rounding errors so alloc sums to exactly 100 */
+      const largest = dcpFunds.reduce((a, b) => a.alloc > b.alloc ? a : b);
+      largest.alloc = +(largest.alloc + (100 - dcpAllocTotal())).toFixed(2);
+    }
 
-    /* Enable DCP section */
-    const dcpEnable = document.getElementById('dcp-enabled');
-    const dcpBody   = document.getElementById('dcp-section-body');
-    if (dcpEnable) dcpEnable.checked = true;
-    if (dcpBody)   dcpBody.style.display = 'block';
     buildDcpSection();
     updateRetirement();
   }
@@ -4380,6 +4313,7 @@ function htToggle(btn) {
 }
 
 /* ═══ INIT ═══ */
+buildDcpSection();
 buildOverview();
 buildLocation();
 solveTax();
