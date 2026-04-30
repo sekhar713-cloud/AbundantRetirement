@@ -2702,7 +2702,7 @@ function updateRetirement(){
    ═══════════════════════════════════════════════════════════════════ */
 function exportData() {
   const data = {
-    version: 1,
+    version: 2,
     exported: new Date().toISOString(),
     state: {
       taxable: state.taxable,
@@ -2732,6 +2732,17 @@ function exportData() {
       funds: dcpFunds.map(f => ({ name: f.name, ticker: f.ticker, cat: f.cat, ret: f.ret, value: f.value || 0, alloc: f.alloc || 0 })),
       state: { annualContrib: dcpState.annualContrib, payoutYears: dcpState.payoutYears, payoutStartAge: dcpState.payoutStartAge },
     },
+    customPort: {
+      name:      customPort.name,
+      manualRet: customPort.manualRet,
+      holdings:  customPort.holdings.map(h => ({
+        ticker: h.ticker, fundName: h.fundName, acct: h.acct,
+        value: h.value || 0, er: h.er || 0, div: h.div || 0,
+        cat: h.cat || '', estRet: h.estRet != null ? h.estRet : null,
+      })),
+    },
+    rothConvert: { filing: rcState.filing, targetBracket: rcState.targetBracket, otherIncome: rcState.otherIncome },
+    healthcare:  { people: hcState.people, magi: hcState.magi },
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
@@ -2816,6 +2827,37 @@ function importData(file) {
           if (d.dcp.state.payoutStartAge != null) dcpState.payoutStartAge = d.dcp.state.payoutStartAge;
         }
         buildDcpSection();
+      }
+      if (d.customPort) {
+        if (d.customPort.name != null) {
+          customPort.name = d.customPort.name;
+          const el = document.getElementById('cp-name');
+          if (el) el.value = customPort.name;
+        }
+        customPort.manualRet = d.customPort.manualRet != null ? d.customPort.manualRet : null;
+        const retEl = document.getElementById('cp-ret-override');
+        if (retEl) retEl.value = customPort.manualRet !== null ? (customPort.manualRet * 100).toFixed(1) : '';
+        if (Array.isArray(d.customPort.holdings)) {
+          customPort._nextId = 0;
+          customPort.holdings = d.customPort.holdings.map(h => ({ ...h, id: cpNextId() }));
+        }
+        buildCustomPortfolio();
+      }
+      if (d.rothConvert) {
+        if (d.rothConvert.filing        != null) rcState.filing         = d.rothConvert.filing;
+        if (d.rothConvert.targetBracket != null) rcState.targetBracket  = d.rothConvert.targetBracket;
+        if (d.rothConvert.otherIncome   != null) rcState.otherIncome    = d.rothConvert.otherIncome;
+        const filingEl  = document.getElementById('rc-filing');         if (filingEl)  filingEl.value  = rcState.filing;
+        const bracketEl = document.getElementById('rc-target-bracket'); if (bracketEl) bracketEl.value = rcState.targetBracket;
+        const otherEl   = document.getElementById('rc-other-income');   if (otherEl)   otherEl.value   = rcState.otherIncome;
+        buildRothConvert();
+      }
+      if (d.healthcare) {
+        if (d.healthcare.people != null) hcState.people = d.healthcare.people;
+        if (d.healthcare.magi   != null) hcState.magi   = d.healthcare.magi;
+        const peopleEl = document.getElementById('hc-people'); if (peopleEl) peopleEl.value = hcState.people;
+        const magiEl   = document.getElementById('hc-magi');   if (magiEl)   magiEl.value   = hcState.magi;
+        buildHealthcareBridge();
       }
       buildOverview();
       buildLocation();
