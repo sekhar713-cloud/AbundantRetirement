@@ -332,6 +332,21 @@ body {
 #tab-howto .ht-cta p { color:var(--muted); font-size:13px; line-height:1.7; max-width:460px; margin:0 auto 24px; }
 #tab-howto .ht-cta-btn { display:inline-block; background:var(--surface2); color:var(--accent); text-decoration:none; padding:12px 32px; border-radius:6px; font-weight:500; font-size:13px; letter-spacing:0.5px; border:1px solid var(--accent); cursor:pointer; transition:all 0.2s; }
 #tab-howto .ht-cta-btn:hover { background:var(--accent); color:var(--bg); }
+/* ── Portfolio Growth ── */
+.pg-gain  { color:#22c55e; font-weight:600; }
+.pg-loss  { color:#ef4444; font-weight:600; }
+.pg-flat  { color:var(--muted); }
+.pg-badge { font-size:9px; background:rgba(78,205,196,0.12); color:var(--accent3); border:1px solid rgba(78,205,196,0.25); border-radius:3px; padding:1px 5px; font-family:'DM Mono',monospace; vertical-align:middle; margin-left:4px; }
+.pg-badge-est { background:rgba(200,169,110,0.12); color:var(--accent); border-color:rgba(200,169,110,0.3); }
+#pg-table { width:100%; border-collapse:collapse; font-size:12px; margin-bottom:24px; }
+#pg-table thead th { font-size:10px; font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.07em; color:var(--muted); padding:6px 10px; border-bottom:1px solid var(--border); text-align:right; }
+#pg-table thead th:first-child, #pg-table thead th:nth-child(2), #pg-table thead th:nth-child(3) { text-align:left; }
+#pg-table tbody td { padding:7px 10px; border-bottom:1px solid rgba(255,255,255,0.04); text-align:right; vertical-align:middle; }
+#pg-table tbody td:first-child, #pg-table tbody td:nth-child(2), #pg-table tbody td:nth-child(3) { text-align:left; }
+#pg-table tbody tr:hover { background:rgba(255,255,255,0.02); }
+#pg-table tfoot td { padding:8px 10px; border-top:2px solid var(--border); font-weight:700; text-align:right; font-family:'DM Mono',monospace; }
+#pg-table tfoot td:first-child { text-align:left; color:var(--muted); }
+#pg-chart-wrap { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; margin-bottom:24px; }
 </style>
 </head>
 <body>
@@ -1005,6 +1020,23 @@ body {
 
   </div>
 
+  <!-- ── Portfolio Growth Tab ──────────────────────────────── -->
+  <div id="tab-growth" class="tab-panel">
+    <div class="section-title">Portfolio Growth</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.7;">
+      Live market prices from Yahoo Finance applied to your imported holdings.
+      Weekly and YTD changes are estimated by scaling each holding's imported value by the ticker's price return.
+      No-ticker holdings use their estimated annual return.
+    </p>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap;">
+      <button onclick="buildGrowthTab(true)" style="padding:8px 20px;background:var(--accent3);color:#0a1628;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:'DM Mono',monospace;cursor:pointer;letter-spacing:0.04em;">↻ Refresh prices</button>
+      <span id="pg-last-updated" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+    </div>
+    <div id="growth-content">
+      <div style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Open this tab to load live market data.</div>
+    </div>
+  </div>
+
   <div id="tab-about" class="tab-panel">
     <div class="about-hero">
       <h2>A Navigation Map for Retirement</h2>
@@ -1092,7 +1124,8 @@ body {
 const tabDefs = [
   ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Financial Runway'],
   ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
-  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],['howto','How To Use'],['about','About']
+  ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],
+  ['growth','Portfolio Growth'],['howto','How To Use'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -1105,6 +1138,7 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   const idx = tabDefs.findIndex(t => t[0]===id);
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
+  if (id === 'growth') buildGrowthTab();
 }
 
 let lastModelEngine = 'factor';
@@ -4317,6 +4351,309 @@ function applyXlsxImport() {
       maybeFinish();
     });
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PORTFOLIO GROWTH TAB
+   ═══════════════════════════════════════════════════════════════════ */
+const PG_CACHE = {};
+
+async function pgFetchHistory(ticker) {
+  if (ticker in PG_CACHE) return PG_CACHE[ticker];
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1wk&range=ytd&includePrePost=false&events=`;
+    const resp = await fetch(url, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+    const json = await resp.json();
+    const r = json?.chart?.result?.[0];
+    if (!r) { PG_CACHE[ticker] = null; return null; }
+    const ts     = r.timestamp || [];
+    const closes = r.indicators?.quote?.[0]?.close || [];
+    /* Fill any null closes with previous value */
+    for (let i = 1; i < closes.length; i++) if (closes[i] == null) closes[i] = closes[i-1];
+    const result = { timestamps: ts, closes };
+    PG_CACHE[ticker] = result;
+    return result;
+  } catch {
+    PG_CACHE[ticker] = null;
+    return null;
+  }
+}
+
+function pgFmt$(v)  { return (v>=0?'+':'')+fmtD(v); }
+function pgFmtPct(p){ return (p>=0?'+':'')+p.toFixed(2)+'%'; }
+function pgClass(v) { return v>0?'pg-gain':v<0?'pg-loss':'pg-flat'; }
+
+async function buildGrowthTab(forceRefresh) {
+  const el = document.getElementById('growth-content');
+  if (!el) return;
+
+  /* Gather all holdings: custom portfolio + active DCP funds */
+  const holdings = customPort.holdings.map(h => ({
+    ticker:   h.ticker || '',
+    name:     h.fundName || h.ticker || '—',
+    acct:     h.acct,
+    value:    h.value || 0,
+    cat:      h.cat || '',
+    estRet:   h.estRet || null,
+    noTicker: !h.ticker,
+  }));
+  dcpFunds.filter(f => f.value > 0).forEach(f => {
+    holdings.push({ ticker: f.ticker, name: f.name, acct: 'DCP', value: f.value, cat: f.cat, estRet: f.ret, noTicker: false });
+  });
+
+  if (!holdings.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Import a portfolio first, then open this tab.</div>`;
+    return;
+  }
+
+  /* Show loading */
+  const tickers = [...new Set(holdings.filter(h => h.ticker).map(h => h.ticker))];
+  el.innerHTML = `<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px;">
+    Fetching live prices for ${tickers.length} tickers…
+    <div style="margin-top:12px;background:var(--border);border-radius:4px;height:4px;width:240px;margin-left:auto;margin-right:auto;">
+      <div id="pg-prog-bar" style="height:4px;background:var(--accent3);border-radius:4px;width:0%;transition:width 0.3s;"></div>
+    </div>
+  </div>`;
+
+  /* Clear cache if forced */
+  if (forceRefresh) tickers.forEach(t => delete PG_CACHE[t]);
+
+  /* Fetch all histories in parallel */
+  let done = 0;
+  const hist = {};
+  await Promise.all(tickers.map(async t => {
+    hist[t] = await pgFetchHistory(t);
+    done++;
+    const bar = document.getElementById('pg-prog-bar');
+    if (bar) bar.style.width = (done / tickers.length * 100).toFixed(0) + '%';
+  }));
+
+  /* Compute per-holding stats */
+  /* Align all weeks: build a master week list from the ticker with most data */
+  let masterWeeks = [];
+  tickers.forEach(t => {
+    if (hist[t] && hist[t].timestamps.length > masterWeeks.length)
+      masterWeeks = hist[t].timestamps;
+  });
+  const nWeeks = masterWeeks.length;
+
+  const rowData = holdings.map(h => {
+    const d = h.ticker ? hist[h.ticker] : null;
+    let weekPct = null, ytdPct = null, weekDelta = 0, ytdDelta = 0, curVal = h.value;
+
+    if (d && d.closes.length >= 2) {
+      const first = d.closes[0];
+      const last  = d.closes[d.closes.length - 1];
+      const prev  = d.closes[d.closes.length - 2];
+      if (first && last && prev) {
+        ytdPct   = (last - first) / first * 100;
+        weekPct  = (last - prev) / prev * 100;
+        /* Scale imported value back to Jan-1 start, then forward to now */
+        const jan1Val = h.value / (1 + ytdPct / 100);
+        ytdDelta  = h.value - jan1Val;
+        const prevVal = jan1Val * (prev / first);
+        weekDelta = h.value - prevVal;
+        curVal    = h.value;
+      }
+    } else {
+      /* No price data — estimate from annual return */
+      const annRet = h.estRet || (catEstRet[h.cat] || 0.085);
+      weekPct   = (Math.pow(1 + annRet, 1/52) - 1) * 100;
+      const weeksElapsed = Math.max(1, Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 1)) / (7*86400*1000)));
+      ytdPct    = (Math.pow(1 + annRet, weeksElapsed/52) - 1) * 100;
+      weekDelta = h.value * weekPct / 100;
+      ytdDelta  = h.value / (1 + ytdPct/100) * (ytdPct/100);
+    }
+
+    return { ...h, weekPct, ytdPct, weekDelta, ytdDelta, curVal, live: !!(d && d.closes.length >= 2) };
+  });
+
+  /* Build weekly portfolio value series */
+  /* For each week index: sum estimated portfolio value */
+  const weeklyTotals = [];
+  for (let w = 0; w < nWeeks; w++) {
+    let total = 0;
+    holdings.forEach(h => {
+      const d = h.ticker ? hist[h.ticker] : null;
+      if (d && d.closes.length > 0) {
+        const first = d.closes[0];
+        /* Find closest close for week w — some tickers may have fewer weeks */
+        const wi    = Math.min(w, d.closes.length - 1);
+        const close = d.closes[wi];
+        if (first && close) {
+          const weekReturn = (close - first) / first;
+          const jan1Val    = h.value / (1 + (d.closes[d.closes.length-1] - first) / first);
+          total += jan1Val * (1 + weekReturn);
+        } else {
+          total += h.value;
+        }
+      } else {
+        /* Estimated — linear growth per week */
+        const annRet = h.estRet || (catEstRet[h.cat] || 0.085);
+        total += h.value * Math.pow(1 + annRet, (w - nWeeks + 1) / 52);
+      }
+    });
+    weeklyTotals.push(total);
+  }
+
+  /* ── Render ── */
+  const acctColor = { Taxable: 'var(--taxable-color)', Traditional: 'var(--trad-color)', Roth: 'var(--roth-color)', DCP: 'var(--dcp-color)' };
+  const totValue = rowData.reduce((s, r) => s + r.curVal, 0);
+  const totWeek  = rowData.reduce((s, r) => s + r.weekDelta, 0);
+  const totYtd   = rowData.reduce((s, r) => s + r.ytdDelta, 0);
+  const totWeekPct = weeklyTotals.length >= 2 ? (weeklyTotals[weeklyTotals.length-1] - weeklyTotals[weeklyTotals.length-2]) / weeklyTotals[weeklyTotals.length-2] * 100 : 0;
+  const totYtdPct  = weeklyTotals.length >= 2 ? (weeklyTotals[weeklyTotals.length-1] - weeklyTotals[0]) / weeklyTotals[0] * 100 : 0;
+
+  const tableRows = rowData.map(r => `
+    <tr>
+      <td style="font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;">${escHtml(r.ticker)||'—'}
+        <span class="pg-badge${r.live?'':' pg-badge-est'}">${r.live?'live':'est'}</span>
+      </td>
+      <td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.name)}">${escHtml(r.name)}</td>
+      <td><span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${acctColor[r.acct]||'var(--border)'}22;color:${acctColor[r.acct]||'var(--muted)'};">${r.acct}</span></td>
+      <td style="font-family:'DM Mono',monospace;">${fmtD(r.curVal)}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekDelta)}">${pgFmt$(r.weekDelta)}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekPct)}">${r.weekPct!=null?pgFmtPct(r.weekPct):'—'}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.ytdDelta)}">${pgFmt$(r.ytdDelta)}</td>
+      <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.ytdPct)}">${r.ytdPct!=null?pgFmtPct(r.ytdPct):'—'}</td>
+    </tr>`).join('');
+
+  /* Week labels */
+  const weekLabels = masterWeeks.map(ts => {
+    const d = new Date(ts * 1000);
+    return `${d.toLocaleString('default',{month:'short'})} ${d.getDate()}`;
+  });
+
+  el.innerHTML = `
+    <!-- Summary cards -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;">
+      <div class="metric-card">
+        <div class="label">Portfolio Value</div>
+        <div class="value accent3" style="font-size:22px;">${fmtM(totValue)}</div>
+        <div class="sub">${holdings.length} holdings</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">This week</div>
+        <div style="font-size:22px;font-weight:600;" class="${pgClass(totWeek)}">${pgFmt$(totWeek)}</div>
+        <div style="font-size:11px;" class="${pgClass(totWeekPct)}">${pgFmtPct(totWeekPct)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">YTD gain / loss</div>
+        <div style="font-size:22px;font-weight:600;" class="${pgClass(totYtd)}">${pgFmt$(totYtd)}</div>
+        <div style="font-size:11px;" class="${pgClass(totYtdPct)}">${pgFmtPct(totYtdPct)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Live tickers</div>
+        <div class="value">${rowData.filter(r=>r.live).length} <span style="font-size:14px;color:var(--muted);">/ ${rowData.length}</span></div>
+        <div class="sub">${rowData.filter(r=>!r.live).length} estimated</div>
+      </div>
+    </div>
+
+    <!-- Weekly chart -->
+    <div class="pg-chart-wrap" id="pg-chart-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;">
+      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px;">Total Portfolio — Week over Week (YTD)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Estimated from price returns applied to imported balances · Jan 1 ${new Date().getFullYear()} to present</div>
+      <canvas id="pg-canvas" style="width:100%;display:block;"></canvas>
+    </div>
+
+    <!-- Holdings table -->
+    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:10px;">Holdings Detail</div>
+    <div style="overflow-x:auto;">
+      <table id="pg-table">
+        <thead><tr>
+          <th style="text-align:left;">Ticker</th>
+          <th style="text-align:left;">Fund</th>
+          <th style="text-align:left;">Acct</th>
+          <th>Value</th>
+          <th>Week $</th>
+          <th>Week %</th>
+          <th>YTD $</th>
+          <th>YTD %</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+        <tfoot><tr>
+          <td colspan="3">Total</td>
+          <td style="font-family:'DM Mono',monospace;">${fmtD(totValue)}</td>
+          <td class="${pgClass(totWeek)}">${pgFmt$(totWeek)}</td>
+          <td class="${pgClass(totWeekPct)}">${pgFmtPct(totWeekPct)}</td>
+          <td class="${pgClass(totYtd)}">${pgFmt$(totYtd)}</td>
+          <td class="${pgClass(totYtdPct)}">${pgFmtPct(totYtdPct)}</td>
+        </tr></tfoot>
+      </table>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;">
+      Changes estimated by applying Yahoo Finance weekly price returns to imported balances. Actual values depend on exact share counts at import date.
+    </div>`;
+
+  /* Update last-refreshed timestamp */
+  const lu = document.getElementById('pg-last-updated');
+  if (lu) lu.textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+  /* Draw chart */
+  pgDrawChart(weekLabels, weeklyTotals);
+}
+
+function pgDrawChart(labels, values) {
+  const canvas = document.getElementById('pg-canvas');
+  if (!canvas || !values.length) return;
+  const W = canvas.parentElement.clientWidth - 32 || 800;
+  const H = 220;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const pad = { top: 16, right: 16, bot: 32, left: 80 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bot;
+  const minV = Math.min(...values) * 0.998;
+  const maxV = Math.max(...values) * 1.002;
+  const xP = i => pad.left + (i / Math.max(values.length - 1, 1)) * cW;
+  const yP = v => pad.top + cH - ((v - minV) / (maxV - minV)) * cH;
+
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#1a2540';
+  ctx.fillRect(0, 0, W, H);
+
+  /* Grid lines */
+  const nGrid = 4;
+  for (let i = 0; i <= nGrid; i++) {
+    const v = minV + (maxV - minV) * i / nGrid;
+    const y = yP(v);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+    ctx.fillStyle = '#6B7280'; ctx.font = '9px DM Mono,monospace'; ctx.textAlign = 'right';
+    ctx.fillText(fmtM(v), pad.left - 5, y + 3);
+  }
+
+  /* X-axis labels — show ~6 evenly spaced */
+  const step = Math.ceil(labels.length / 6);
+  labels.forEach((lbl, i) => {
+    if (i % step !== 0 && i !== labels.length - 1) return;
+    ctx.fillStyle = '#6B7280'; ctx.font = '9px DM Mono,monospace'; ctx.textAlign = 'center';
+    ctx.fillText(lbl, xP(i), H - pad.bot + 12);
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)'; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(xP(i), pad.top); ctx.lineTo(xP(i), H - pad.bot); ctx.stroke();
+  });
+
+  /* Area fill */
+  const grad = ctx.createLinearGradient(0, pad.top, 0, H - pad.bot);
+  const isUp = values[values.length - 1] >= values[0];
+  grad.addColorStop(0, isUp ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)');
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  values.forEach((v, i) => i === 0 ? ctx.moveTo(xP(i), yP(v)) : ctx.lineTo(xP(i), yP(v)));
+  ctx.lineTo(xP(values.length - 1), H - pad.bot);
+  ctx.lineTo(xP(0), H - pad.bot);
+  ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+
+  /* Line */
+  ctx.beginPath();
+  values.forEach((v, i) => i === 0 ? ctx.moveTo(xP(i), yP(v)) : ctx.lineTo(xP(i), yP(v)));
+  ctx.strokeStyle = isUp ? '#22c55e' : '#ef4444';
+  ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+
+  /* Current value dot */
+  const last = values.length - 1;
+  ctx.beginPath();
+  ctx.arc(xP(last), yP(values[last]), 4, 0, Math.PI * 2);
+  ctx.fillStyle = isUp ? '#22c55e' : '#ef4444'; ctx.fill();
 }
 
 /* ═══ HOW TO USE FAQ TOGGLE ═══ */
