@@ -1161,10 +1161,12 @@ const state = {
   currentAge:        46,
   retireAge:         50,
   additions: [
-    {taxable:200000, traditional:23000, roth:0},
-    {taxable:200000, traditional:23000, roth:0},
-    {taxable:200000, traditional:23000, roth:0},
-    {taxable:200000, traditional:23000, roth:0},
+    /* traditional = $23,500 employee 401k + $11,750 (50% employer match) = $35,250 */
+    /* roth = $7,000 backdoor Roth IRA (2025 max)                                   */
+    {taxable:0, traditional:35250, roth:7000},
+    {taxable:0, traditional:35250, roth:7000},
+    {taxable:0, traditional:35250, roth:7000},
+    {taxable:0, traditional:35250, roth:7000},
   ],
 };
 
@@ -1632,8 +1634,8 @@ function buildAdditionsTable() {
       <thead><tr>
         <th>Year</th>
         <th style="color:var(--taxable-color);">Taxable</th>
-        <th style="color:var(--trad-color);">Traditional</th>
-        <th style="color:var(--roth-color);">Roth</th>
+        <th style="color:var(--trad-color);">Traditional 401k<br><small style="font-weight:400;color:var(--muted);">employee + employer match</small></th>
+        <th style="color:var(--roth-color);">Roth<br><small style="font-weight:400;color:var(--muted);">backdoor IRA</small></th>
         <th>Year Total</th>
       </tr></thead>
       <tbody>
