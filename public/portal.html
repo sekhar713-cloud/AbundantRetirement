@@ -1020,18 +1020,22 @@ body {
 
   </div>
 
-  <!-- ── Portfolio Growth Tab ──────────────────────────────── -->
+  <!-- ── Live Portfolio Tab ───────────────────────────────── -->
   <div id="tab-growth" class="tab-panel">
-    <div class="section-title">Portfolio Growth</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.7;">
-      Live market prices from Yahoo Finance applied to your imported holdings.
-      Weekly and YTD changes are estimated by scaling each holding's imported value by the ticker's price return.
-      No-ticker holdings use their estimated annual return.
-    </p>
-    <div style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap;">
-      <button onclick="buildGrowthTab(true)" style="padding:8px 20px;background:var(--accent3);color:#0a1628;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:'DM Mono',monospace;cursor:pointer;letter-spacing:0.04em;">↻ Refresh prices</button>
-      <span id="pg-last-updated" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:6px;">
+      <div class="section-title" style="margin-bottom:0;border-bottom:none;padding-bottom:0;">
+        Live Portfolio Values
+        <span style="font-size:11px;font-family:'DM Mono',monospace;font-weight:400;color:var(--accent3);margin-left:10px;">via Yahoo Finance</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button onclick="buildGrowthTab(true)" style="padding:7px 18px;background:var(--accent3);color:#0a1628;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:'DM Mono',monospace;cursor:pointer;letter-spacing:0.04em;">↻ Refresh</button>
+        <span id="pg-last-updated" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+      </div>
     </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:20px;line-height:1.6;">
+      Real-time weekly closing prices from Yahoo Finance applied to your imported holding balances.
+      <span style="color:var(--accent3);">Live</span> = actual price return · <span style="color:var(--accent);">Est</span> = no public ticker, estimated from fund category return.
+    </p>
     <div id="growth-content">
       <div style="text-align:center;padding:40px;color:var(--muted);font-size:13px;">Open this tab to load live market data.</div>
     </div>
@@ -1125,7 +1129,7 @@ const tabDefs = [
   ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Financial Runway'],
   ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],
-  ['growth','Portfolio Growth'],['howto','How To Use'],['about','About']
+  ['growth','Live Portfolio'],['howto','How To Use'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -4528,36 +4532,36 @@ async function buildGrowthTab(forceRefresh) {
     <!-- Summary cards -->
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;">
       <div class="metric-card">
-        <div class="label">Portfolio Value</div>
+        <div class="label">Live Portfolio Value</div>
         <div class="value accent3" style="font-size:22px;">${fmtM(totValue)}</div>
-        <div class="sub">${holdings.length} holdings</div>
+        <div class="sub">${holdings.length} holdings · as of ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
       </div>
       <div class="metric-card">
-        <div class="label">This week</div>
+        <div class="label">This Week Change</div>
         <div style="font-size:22px;font-weight:600;" class="${pgClass(totWeek)}">${pgFmt$(totWeek)}</div>
         <div style="font-size:11px;" class="${pgClass(totWeekPct)}">${pgFmtPct(totWeekPct)}</div>
       </div>
       <div class="metric-card">
-        <div class="label">YTD gain / loss</div>
+        <div class="label">YTD Gain / Loss</div>
         <div style="font-size:22px;font-weight:600;" class="${pgClass(totYtd)}">${pgFmt$(totYtd)}</div>
         <div style="font-size:11px;" class="${pgClass(totYtdPct)}">${pgFmtPct(totYtdPct)}</div>
       </div>
       <div class="metric-card">
-        <div class="label">Live tickers</div>
-        <div class="value">${rowData.filter(r=>r.live).length} <span style="font-size:14px;color:var(--muted);">/ ${rowData.length}</span></div>
-        <div class="sub">${rowData.filter(r=>!r.live).length} estimated</div>
+        <div class="label">Price Source</div>
+        <div class="value">${rowData.filter(r=>r.live).length} <span style="font-size:14px;color:var(--muted);">live</span></div>
+        <div class="sub">${rowData.filter(r=>!r.live).length} estimated · Yahoo Finance</div>
       </div>
     </div>
 
     <!-- Weekly chart -->
     <div class="pg-chart-wrap" id="pg-chart-wrap" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:24px;">
-      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px;">Total Portfolio — Week over Week (YTD)</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Estimated from price returns applied to imported balances · Jan 1 ${new Date().getFullYear()} to present</div>
+      <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:4px;">Total Portfolio — Weekly Value (YTD)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Live price returns from Yahoo Finance applied to imported balances · Jan 1 ${new Date().getFullYear()} → today</div>
       <canvas id="pg-canvas" style="width:100%;display:block;"></canvas>
     </div>
 
     <!-- Holdings table -->
-    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:10px;">Holdings Detail</div>
+    <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:600;margin-bottom:10px;">Individual Holdings — Weekly &amp; YTD Changes</div>
     <div style="overflow-x:auto;">
       <table id="pg-table">
         <thead><tr>
@@ -4581,8 +4585,10 @@ async function buildGrowthTab(forceRefresh) {
         </tr></tfoot>
       </table>
     </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;">
-      Changes estimated by applying Yahoo Finance weekly price returns to imported balances. Actual values depend on exact share counts at import date.
+    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;">
+      <strong>How values are calculated:</strong> Yahoo Finance weekly closing prices are applied proportionally to your imported dollar balances.
+      Weekly change = last close vs. prior week close. YTD change = last close vs. Jan 1 close.
+      Institutional / no-ticker funds (marked <em>est</em>) use category-level annual return estimates.
     </div>`;
 
   /* Update last-refreshed timestamp */
