@@ -3598,7 +3598,7 @@ function buildNetWorth() {
   }).join('');
 
   /* Table */
-  const showRows = allPts.filter((_,i) => i%5===0||i===retireIdx||i===allPts.length-1);
+  const showRows = allPts;
   tableEl.innerHTML = `
     <thead><tr>
       <th>Age</th><th>Phase</th>
