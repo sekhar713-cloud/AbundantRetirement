@@ -2745,7 +2745,7 @@ function exportData() {
       manualRet: customPort.manualRet,
       holdings:  customPort.holdings.map(h => ({
         ticker: h.ticker, fundName: h.fundName, acct: h.acct,
-        value: h.value || 0, er: h.er || 0, div: h.div || 0,
+        value: h.value || 0, shares: h.shares || 0, er: h.er || 0, div: h.div || 0,
         cat: h.cat || '', estRet: h.estRet != null ? h.estRet : null,
       })),
     },
@@ -3238,7 +3238,7 @@ function cpRenderHoldings() {
   const h = customPort.holdings;
   let tbody = '';
   if (h.length === 0) {
-    tbody = '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;font-family:\'DM Mono\',monospace;font-size:12px;">No holdings yet — click + Add Holding to start</td></tr>';
+    tbody = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-family:\'DM Mono\',monospace;font-size:12px;">No holdings yet — click + Add Holding to start</td></tr>';
   } else {
     tbody = h.map(r => {
       const acctColor = r.acct==='Taxable'?'var(--taxable-color)':r.acct==='Traditional'?'var(--trad-color)':'var(--roth-color)';
@@ -3265,8 +3265,12 @@ function cpRenderHoldings() {
             onkeydown="if(event.key==='Enter')this.blur()">
           ${badge}
         </td>
+        <td style="white-space:nowrap;"><input class="cp-input" type="number" value="${r.shares||''}"
+          placeholder="0" min="0" step="0.001" style="width:80px;text-align:right;"
+          title="Share count — used by Live Portfolio for real-time value"
+          onchange="cpUpdateField(${r.id},'shares',this.value)"></td>
         <td><input class="cp-input" value="${escHtml(r.fundName)}" placeholder="Fund name"
-          style="width:210px;"
+          style="width:180px;"
           onchange="cpUpdateField(${r.id},'fundName',this.value)"></td>
         <td>
           <select class="cp-input" onchange="cpUpdateField(${r.id},'acct',this.value)" style="color:${acctColor};">
@@ -3291,7 +3295,7 @@ function cpRenderHoldings() {
   document.getElementById('cp-holdings-table').innerHTML = `
     <table class="cp-table">
       <thead><tr>
-        <th>Ticker</th><th>Fund / Name</th><th>Account</th>
+        <th>Ticker</th><th>Shares</th><th>Fund / Name</th><th>Account</th>
         <th>$ Value</th><th>ER %</th><th>Category</th><th></th>
       </tr></thead>
       <tbody>${tbody}</tbody>
@@ -3333,7 +3337,7 @@ function cpApplySuggestion(id) {
 }
 
 function cpAddRow() {
-  customPort.holdings.push({id:cpNextId(), ticker:'', fundName:'', acct:'Taxable', value:0, er:0, div:0, cat:'US Large Blend'});
+  customPort.holdings.push({id:cpNextId(), ticker:'', fundName:'', acct:'Taxable', value:0, shares:0, er:0, div:0, cat:'US Large Blend'});
   cpRenderHoldings();
 }
 
@@ -3392,6 +3396,7 @@ function cpUpdateField(id, field, raw) {
   const row = customPort.holdings.find(h => h.id === id);
   if (!row) return;
   if      (field === 'value')    row.value    = parseFloat(String(raw).replace(/[^0-9.]/g,'')) || 0;
+  else if (field === 'shares')   row.shares   = parseFloat(String(raw).replace(/[^0-9.]/g,'')) || 0;
   else if (field === 'er')       row.er       = parseFloat(raw) || 0;
   else if (field === 'acct')     { row.acct = raw; cpRenderHoldings(); }
   else if (field === 'fundName') row.fundName = raw;
@@ -4189,6 +4194,7 @@ function parseXlsx(binary, fname) {
       const sym     = rawSym.toUpperCase();
       const name    = String(r['Name'] || '').trim();
       const bal     = parseFloat(String(r['Current Balance'] || '0').replace(/[^0-9.]/g, '')) || 0;
+      const qty     = parseFloat(String(r['Quantity'] || r['Shares'] || r['Units'] || '0').replace(/[^0-9.]/g, '')) || 0;
       const er      = parseFloat(r['ER'] || 0) || 0;
       const loc     = String(r['Location'] || '').trim();
       const broker  = String(r['Account Location Broker/Company'] || '').trim();
@@ -4241,6 +4247,7 @@ function parseXlsx(binary, fname) {
         fundName:    displayName,
         acct,
         value:       bal,
+        shares:      qty,
         er:          db ? db.er : er,
         div:         db ? db.div : 1.5,
         cat:         resolvedCat,
@@ -4522,11 +4529,12 @@ async function buildGrowthTab(forceRefresh) {
     name:    h.fundName || h.ticker || '—',
     acct:    h.acct,
     value:   h.value || 0,
+    shares:  h.shares || 0,
     cat:     h.cat   || '',
     estRet:  h.estRet != null ? h.estRet : null,
   }));
   dcpFunds.filter(f => f.value > 0).forEach(f => {
-    holdings.push({ ticker: f.ticker, name: f.name, acct: 'DCP', value: f.value, cat: f.cat, estRet: f.ret });
+    holdings.push({ ticker: f.ticker, name: f.name, acct: 'DCP', value: f.value, shares: 0, cat: f.cat, estRet: f.ret });
   });
 
   if (!holdings.length) {
@@ -4569,13 +4577,18 @@ async function buildGrowthTab(forceRefresh) {
       weekPrice  = d.weekPrice;  weekDate  = d.weekDate;
       janPrice   = d.janPrice;   janDate   = d.janDate;
 
-      weekPct  = (todayPrice - weekPrice) / weekPrice * 100;
-      ytdPct   = (todayPrice - janPrice)  / janPrice  * 100;
+      weekPct = (todayPrice - weekPrice) / weekPrice * 100;
+      ytdPct  = (todayPrice - janPrice)  / janPrice  * 100;
 
-      /* h.value is the balance at current (today) price.
-         Scale back to each reference date using price ratios. */
-      weekDelta = h.value * (todayPrice - weekPrice) / todayPrice;
-      ytdDelta  = h.value * (todayPrice - janPrice)  / todayPrice;
+      if (h.shares > 0) {
+        /* Exact: shares × price change */
+        weekDelta = h.shares * (todayPrice - weekPrice);
+        ytdDelta  = h.shares * (todayPrice - janPrice);
+      } else {
+        /* Fallback: treat h.value as today's value, scale by price ratio */
+        weekDelta = h.value * (todayPrice - weekPrice) / todayPrice;
+        ytdDelta  = h.value * (todayPrice - janPrice)  / todayPrice;
+      }
       live = true;
     } else {
       /* Estimated from annual return */
@@ -4588,7 +4601,9 @@ async function buildGrowthTab(forceRefresh) {
       ytdDelta  = h.value * ytdPct   / 100;
     }
 
-    return { ...h, weekPct, ytdPct, weekDelta, ytdDelta, live,
+    /* Live value: shares × today's price beats the import-time dollar snapshot */
+    const liveValue = (h.shares > 0 && todayPrice > 0) ? h.shares * todayPrice : h.value;
+    return { ...h, liveValue, weekPct, ytdPct, weekDelta, ytdDelta, live,
              todayPrice, weekPrice, janPrice, todayDate, weekDate, janDate };
   });
 
@@ -4614,8 +4629,12 @@ async function buildGrowthTab(forceRefresh) {
         let ci = 0;
         for (let i = 0; i < d.ts.length; i++) { if (d.ts[i] <= dayTs) ci = i; }
         const dayPrice = d.closes[ci];
-        if (dayPrice > 0) total += h.value * (dayPrice / d.todayPrice);
-        else              total += h.value;
+        if (dayPrice > 0) {
+          /* shares × dayPrice is exact; fallback scales import value by price ratio */
+          total += h.shares > 0 ? h.shares * dayPrice : h.value * (dayPrice / d.todayPrice);
+        } else {
+          total += h.shares > 0 ? h.shares * d.todayPrice : h.value;
+        }
       } else {
         const annRet = (h.estRet != null && h.estRet > 0) ? h.estRet : (catEstRet[h.cat] || 0.085);
         const daysFwd = (dayTs - nowSec) / 86400;
@@ -4632,7 +4651,7 @@ async function buildGrowthTab(forceRefresh) {
 
   /* ── Aggregates ── */
   const acctColor = { Taxable:'var(--taxable-color)', Traditional:'var(--trad-color)', Roth:'var(--roth-color)', DCP:'var(--dcp-color)' };
-  const totValue   = rowData.reduce((s, r) => s + r.value, 0);
+  const totValue   = rowData.reduce((s, r) => s + r.liveValue, 0);
   const totWeek$   = rowData.reduce((s, r) => s + r.weekDelta, 0);
   const totYtd$    = rowData.reduce((s, r) => s + r.ytdDelta, 0);
   const totWeekPct = totValue > 0 ? totWeek$ / (totValue - totWeek$) * 100 : 0;
@@ -4644,9 +4663,10 @@ async function buildGrowthTab(forceRefresh) {
       <td style="font-family:'DM Mono',monospace;color:var(--accent);font-size:11px;">${escHtml(r.ticker)||'—'}
         <span class="pg-badge${r.live?'':' pg-badge-est'}">${r.live?'live':'est'}</span>
       </td>
-      <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.name)}">${escHtml(r.name)}</td>
+      <td style="font-size:12px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(r.name)}">${escHtml(r.name)}</td>
       <td><span style="font-size:9px;padding:1px 5px;border-radius:3px;background:${acctColor[r.acct]||'var(--border)'}22;color:${acctColor[r.acct]||'var(--muted)'};">${r.acct}</span></td>
-      <td style="font-family:'DM Mono',monospace;">${fmtD(r.value)}</td>
+      <td style="font-family:'DM Mono',monospace;color:var(--muted);font-size:11px;">${r.shares>0?r.shares.toLocaleString(undefined,{maximumFractionDigits:3}):'—'}</td>
+      <td style="font-family:'DM Mono',monospace;">${fmtD(r.liveValue)}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekDelta)}">${pgFmt$(r.weekDelta)}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.weekPct)}">${r.weekPct!=null?pgFmtPct(r.weekPct):'—'}</td>
       <td style="font-family:'DM Mono',monospace;" class="${pgClass(r.ytdDelta)}">${pgFmt$(r.ytdDelta)}</td>
@@ -4724,13 +4744,14 @@ async function buildGrowthTab(forceRefresh) {
           <th style="text-align:left;">Ticker</th>
           <th style="text-align:left;">Fund</th>
           <th style="text-align:left;">Acct</th>
-          <th>Balance</th>
+          <th>Shares</th>
+          <th>Live Value</th>
           <th>7d $</th><th>7d %</th>
           <th>YTD $</th><th>YTD %</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
         <tfoot><tr>
-          <td colspan="3">Total</td>
+          <td colspan="4">Total</td>
           <td style="font-family:'DM Mono',monospace;">${fmtD(totValue)}</td>
           <td class="${pgClass(totWeek$)}">${pgFmt$(totWeek$)}</td>
           <td class="${pgClass(totWeekPct)}">${pgFmtPct(totWeekPct)}</td>
@@ -4741,11 +4762,12 @@ async function buildGrowthTab(forceRefresh) {
     </div>
     <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.7;">
       <strong>Calculation:</strong>
-      7d % = (Today Price − 7d Ago Price) / 7d Ago Price · 
-      YTD % = (Today Price − Jan 1 Price) / Jan 1 Price ·
-      $ change = Balance × price return · 
+      Live Value = Shares × Today Price (or import-time $ if no share count) ·
+      7d % = (Today − 7d Ago) / 7d Ago ·
+      YTD % = (Today − Jan 1) / Jan 1 ·
+      $ change = Shares × price change (exact when shares entered, otherwise ratio-scaled) ·
       Prices from Yahoo Finance daily closes (dividend-adjusted).
-      Estimated (<em>est</em>) funds use category annual return.
+      Enter share counts in Portfolio → Holdings for exact live values.
     </div>`;
 
   const lu = document.getElementById('pg-last-updated');
