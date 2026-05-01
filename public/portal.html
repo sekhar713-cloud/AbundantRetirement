@@ -649,8 +649,12 @@ body {
         <div class="alpha-card">
           <div style="font-size:12px;font-weight:600;color:var(--trad-color);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;">Pension &amp; Other Income</div>
           <div class="input-group">
-            <label>Monthly pension / annuity (starts at retirement)</label>
+            <label>Monthly pension / annuity</label>
             <div class="input-row"><span style="color:var(--muted);font-family:'DM Mono',monospace;margin-right:4px;">$</span><input type="number" class="v3-input" id="pensionMonthly" value="0" min="0" step="100" oninput="incomeState.pensionMonthly=+this.value;updateRetirement();" style="width:110px;"></div>
+          </div>
+          <div class="input-group">
+            <label>Pension starts at age</label>
+            <input type="number" class="v3-input" id="pensionStartAge" value="50" min="40" max="85" oninput="incomeState.pensionStartAge=+this.value;updateRetirement();" style="width:80px;">
           </div>
           <div class="input-group">
             <label>Annual other income (rental, part-time, consulting)</label>
@@ -2262,11 +2266,12 @@ const burnState = {cats: [
 
 /* ── Income sources state ──────────────────────────────────────── */
 const incomeState = {
-  ssBenefit:      0,     // monthly SS benefit at FRA (age 67) — from SSA statement
-  ssClaimAge:     67,    // when to start claiming: 62–70
-  pensionMonthly: 0,     // monthly pension/annuity starting at retirement
-  otherAnnual:    0,     // annual other income (rental, part-time)
-  otherEndAge:    75,    // age other income stops
+  ssBenefit:        0,   // monthly SS benefit at FRA (age 67) — from SSA statement
+  ssClaimAge:       67,  // when to start claiming: 62–70
+  pensionMonthly:   0,   // monthly pension/annuity
+  pensionStartAge:  50,  // age pension begins
+  otherAnnual:      0,   // annual other income (rental, part-time)
+  otherEndAge:      75,  // age other income stops
 };
 
 function ssAdjusted(claimAge) {
@@ -2283,7 +2288,7 @@ function extIncome(age) {
   let inc = 0;
   if (incomeState.ssBenefit && age >= incomeState.ssClaimAge)
     inc += ssAdjusted(incomeState.ssClaimAge) * 12;
-  if (incomeState.pensionMonthly) inc += incomeState.pensionMonthly * 12;
+  if (incomeState.pensionMonthly && age >= (incomeState.pensionStartAge||0)) inc += incomeState.pensionMonthly * 12;
   if (incomeState.otherAnnual && age <= (incomeState.otherEndAge||999)) inc += incomeState.otherAnnual;
   return inc;
 }
@@ -2330,16 +2335,19 @@ function buildIncomeFloorSummary() {
   const el = document.getElementById('income-floor-summary');
   if (!el) return;
   const ssAnn     = ssAdjusted(incomeState.ssClaimAge) * 12;
-  const penAnn    = (incomeState.pensionMonthly||0) * 12;
+  const penAnn    = (incomeState.pensionMonthly && state.retireAge >= (incomeState.pensionStartAge||0)) ? (incomeState.pensionMonthly||0) * 12 : 0;
+  const penFutureAnn = (incomeState.pensionMonthly && state.retireAge < (incomeState.pensionStartAge||0)) ? (incomeState.pensionMonthly||0) * 12 : 0;
   const otherAnn  = incomeState.otherAnnual||0;
   const total     = ssAnn + penAnn + otherAnn;
-  if (total === 0) { el.innerHTML=`<div style="font-size:11px;color:var(--muted);">Add income sources above to see your guaranteed income floor.</div>`; return; }
+  const hasAny    = total > 0 || penFutureAnn > 0;
+  if (!hasAny) { el.innerHTML=`<div style="font-size:11px;color:var(--muted);">Add income sources above to see your guaranteed income floor.</div>`; return; }
   const s1Ann = burnState.cats.reduce((s,c)=>s+c.s1*12,0);
   const coverPct = s1Ann > 0 ? Math.min(100, total/s1Ann*100) : 0;
   el.innerHTML = `
-    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:8px;">Annual income floor at retirement</div>
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:0.06em;font-family:'DM Mono',monospace;margin-bottom:8px;">Annual income floor at retirement (age ${state.retireAge})</div>
     ${ssAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--accent3);">Social Security</span><span style="font-family:'DM Mono',monospace;color:var(--accent3);">${fmtD(ssAnn)}/yr</span></div>`:''}
     ${penAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--trad-color);">Pension</span><span style="font-family:'DM Mono',monospace;color:var(--trad-color);">${fmtD(penAnn)}/yr</span></div>`:''}
+    ${penFutureAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--trad-color);opacity:0.6;">Pension <span style="font-size:10px;">(starts age ${incomeState.pensionStartAge})</span></span><span style="font-family:'DM Mono',monospace;color:var(--trad-color);opacity:0.6;">${fmtD(penFutureAnn)}/yr</span></div>`:''}
     ${otherAnn>0?`<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="color:var(--muted);">Other</span><span style="font-family:'DM Mono',monospace;">${fmtD(otherAnn)}/yr</span></div>`:''}
     <div style="border-top:1px solid var(--border);margin-top:5px;padding-top:5px;display:flex;justify-content:space-between;font-size:13px;font-weight:700;">
       <span>Total floor</span><span style="font-family:'DM Mono',monospace;color:var(--accent);">${fmtD(total)}/yr</span>
@@ -2520,7 +2528,7 @@ function updateRetirement(){
 
     /* External (guaranteed) income: SS + pension + other + DCP */
     const ssAnnual  = (incomeState.ssBenefit && age >= incomeState.ssClaimAge) ? ssAdjusted(incomeState.ssClaimAge)*12 : 0;
-    const penAnnual = incomeState.pensionMonthly ? incomeState.pensionMonthly*12 : 0;
+    const penAnnual = (incomeState.pensionMonthly && age >= (incomeState.pensionStartAge||0)) ? incomeState.pensionMonthly*12 : 0;
     const othAnnual = (incomeState.otherAnnual && age <= (incomeState.otherEndAge||999)) ? incomeState.otherAnnual : 0;
     const extInc    = ssAnnual + penAnnual + othAnnual + dcpDraw;
 
@@ -2778,10 +2786,10 @@ function importData(file) {
         });
       }
       if (d.income) {
-        ['ssBenefit','ssClaimAge','pensionMonthly','otherAnnual','otherEndAge'].forEach(k => {
+        ['ssBenefit','ssClaimAge','pensionMonthly','pensionStartAge','otherAnnual','otherEndAge'].forEach(k => {
           if (d.income[k] != null) incomeState[k] = d.income[k];
         });
-        ['ssBenefit','ssClaimAge','pensionMonthly','otherAnnual','otherEndAge'].forEach(k => {
+        ['ssBenefit','ssClaimAge','pensionMonthly','pensionStartAge','otherAnnual','otherEndAge'].forEach(k => {
           const el = document.getElementById(k); if(el) el.value = incomeState[k];
         });
       }
@@ -3883,7 +3891,7 @@ function buildRothConvert() {
 
   for(let y=0;y<Math.min(windowYrs,20);y++){
     const age = state.retireAge+y;
-    const pen = (incomeState.pensionMonthly||0)*12;
+    const pen = (incomeState.pensionMonthly && age>=(incomeState.pensionStartAge||0)) ? incomeState.pensionMonthly*12 : 0;
     const oth = (incomeState.otherAnnual && age<=(incomeState.otherEndAge||999)) ? incomeState.otherAnnual : 0;
     const extraOrd = rcState.otherIncome||0;
     const baseOrd  = pen + oth + extraOrd;
@@ -3908,7 +3916,7 @@ function buildRothConvert() {
   const rmdAnnual   = tradAtRMD    / (RMD_DIV[73] || 26.5);
   const rmdAnnual_NC= tradAtRMD_NC / (RMD_DIV[73] || 26.5);
   const ssAt73 = (incomeState.ssBenefit && 73 >= incomeState.ssClaimAge) ? ssAdjusted(incomeState.ssClaimAge)*12 : 0;
-  const penAt73= (incomeState.pensionMonthly||0)*12;
+  const penAt73= (incomeState.pensionMonthly && 73>=(incomeState.pensionStartAge||0)) ? incomeState.pensionMonthly*12 : 0;
   const ordAt73_NC = Math.max(0, ssAt73*0.85 + penAt73 + rmdAnnual_NC - sd);
   const ordAt73_C  = Math.max(0, ssAt73*0.85 + penAt73 + rmdAnnual   - sd);
   const rmdTax_NC  = rcMarginalTax(fil, 0, ordAt73_NC);
