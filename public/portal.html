@@ -2775,7 +2775,6 @@ function importData(file) {
         if (Array.isArray(d.state.additions)) state.additions = d.state.additions.map(a => ({...a}));
         resizeAdditions();
       }
-      if (d.engine) setReturnEngine(d.engine);
       if (Array.isArray(d.burn)) {
         d.burn.forEach((c,i) => {
           if (burnState.cats[i]) {
@@ -2816,7 +2815,6 @@ function importData(file) {
       }
       if (d.dcp) {
         if (Array.isArray(d.dcp.funds) && d.dcp.funds.length > 0) {
-          /* Restore exact funds from export — no matching against predefined list */
           dcpFunds = d.dcp.funds.map(saved => {
             const meta = dcpEnrichRow(saved.ticker, saved.name);
             return {
@@ -2839,18 +2837,31 @@ function importData(file) {
       if (d.customPort) {
         if (d.customPort.name != null) {
           customPort.name = d.customPort.name;
-          const el = document.getElementById('cp-name');
-          if (el) el.value = customPort.name;
+          const cpNameEl = document.getElementById('cp-name');
+          if (cpNameEl) cpNameEl.value = customPort.name;
         }
         customPort.manualRet = d.customPort.manualRet != null ? d.customPort.manualRet : null;
         const retEl = document.getElementById('cp-ret-override');
         if (retEl) retEl.value = customPort.manualRet !== null ? (customPort.manualRet * 100).toFixed(1) : '';
-        if (Array.isArray(d.customPort.holdings)) {
+        if (Array.isArray(d.customPort.holdings) && d.customPort.holdings.length > 0) {
           customPort._nextId = 0;
           customPort.holdings = d.customPort.holdings.map(h => ({ ...h, id: cpNextId() }));
+          /* Build fundSets and engineMeta NOW so setReturnEngine('custom') works below */
+          const stats = cpComputeStats();
+          const ret = customPort.manualRet !== null ? customPort.manualRet : stats.weightedRet;
+          fundSets['custom'] = cpBuildFundSet();
+          engineMeta['custom'] = {
+            label: `${customPort.name||'Starting Portfolio'} (${(ret*100).toFixed(1)}%)`,
+            ret,
+            desc:  `${customPort.holdings.length} holding${customPort.holdings.length!==1?'s':''} · blended ER ${stats.blendedER.toFixed(2)}%`,
+          };
+          cpRefreshEngineBtn();
+          setPortfolioMode('custom');
         }
         buildCustomPortfolio();
       }
+      /* Set engine AFTER customPort is restored so fundSets['custom'] is populated */
+      if (d.engine) setReturnEngine(d.engine);
       if (d.rothConvert) {
         if (d.rothConvert.filing        != null) rcState.filing         = d.rothConvert.filing;
         if (d.rothConvert.targetBracket != null) rcState.targetBracket  = d.rothConvert.targetBracket;
