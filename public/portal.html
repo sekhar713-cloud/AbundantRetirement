@@ -429,6 +429,8 @@ body {
       <p style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6;">
         Known tickers (VOO, VTI, AVUV, BND, SCHD…) auto-fill fund name, ER, and category. Set the <strong>Account</strong> column for each ETF — this is your actual allocation. Dollar values drive all account balances across every tab.
       </p>
+      <!-- Portfolio charts — allocation pie + style box -->
+      <div id="cp-charts" style="display:none;margin-bottom:20px;"></div>
       <!-- Account coverage summary — updated by cpRenderHoldings -->
       <div id="cp-coverage" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
       <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
@@ -3475,11 +3477,191 @@ function cpActivate() {
     setTimeout(() => { btn.textContent = 'Activate This Portfolio →'; btn.classList.remove('active'); }, 3500);
   }
   if (!orphanAccts.length) setStatus(`${customPort.holdings.length} holding${customPort.holdings.length!==1?'s':''} · ${fmtM(stats.total)} total · Taxable ${fmtM(stats.taxable)} · Traditional ${fmtM(stats.traditional)} · Roth ${fmtM(stats.roth)}`, 0);
+  requestAnimationFrame(() => cpDrawCharts());
 }
 
 function buildCustomPortfolio() {
   cpRenderHoldings();
   cpRenderStats();
+  requestAnimationFrame(() => cpDrawCharts());
+}
+
+/* ═══ PORTFOLIO CHARTS ═══ */
+const CP_PALETTE = [
+  '#3B82F6','#F59E0B','#10B981','#EF4444','#8B5CF6',
+  '#06B6D4','#F97316','#84CC16','#EC4899','#14B8A6',
+  '#A855F7','#EAB308','#22C55E','#F43F5E','#0EA5E9',
+  '#D946EF','#FB923C','#4ADE80','#FB7185','#38BDF8',
+];
+
+const CP_CAT_MAP = {
+  'US Large Growth':'LG','US Large Blend':'LB','US Large Value':'LV',
+  'US Large Cap':'LB','US Total Market':'LB','US Dividend':'LV',
+  'US Mid Growth':'MG','US Mid Blend':'MB','US Mid Cap':'MB','US Mid Value':'MV',
+  'US Small Growth':'SG','US Small Blend':'SB','US Small Cap':'SB','US Small Value':'SV',
+  'Individual Stock':'LB',
+  'International':'IN','Intl Large Value':'IN','Intl Large Blend':'IN',
+  'Intl Small Value':'IN','Intl Value':'IN','Intl Small Cap':'IN',
+  'EM Value':'EM','Emerging Markets':'EM',
+  'US Bonds':'BD','Stable Value':'BD',
+  'Target Date':'OT',
+};
+
+const CP_BOX = {
+  LG:{r:0,c:2,label:'Lg Gr'},LB:{r:0,c:1,label:'Lg Bl'},LV:{r:0,c:0,label:'Lg Va'},
+  MG:{r:1,c:2,label:'Md Gr'},MB:{r:1,c:1,label:'Md Bl'},MV:{r:1,c:0,label:'Md Va'},
+  SG:{r:2,c:2,label:'Sm Gr'},SB:{r:2,c:1,label:'Sm Bl'},SV:{r:2,c:0,label:'Sm Va'},
+};
+
+function cpDrawCharts() {
+  const wrap = document.getElementById('cp-charts');
+  if (!wrap) return;
+  const h = customPort.holdings.filter(r => r.value > 0);
+  if (h.length === 0) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  const total = h.reduce((s, r) => s + r.value, 0);
+  if (total === 0) { wrap.style.display = 'none'; return; }
+
+  /* ── 1. Allocation pie data ── */
+  const sorted = [...h].sort((a, b) => b.value - a.value);
+  const MIN_PCT = 1.5;
+  const main = [], others = [];
+  sorted.forEach(r => (r.value / total * 100 >= MIN_PCT ? main : others).push(r));
+  const pieSlices = main.map((r, i) => ({
+    label:  r.ticker || r.fundName.slice(0, 10),
+    name:   r.fundName,
+    value:  r.value,
+    pct:    r.value / total * 100,
+    color:  CP_PALETTE[i % CP_PALETTE.length],
+  }));
+  if (others.length) {
+    const ov = others.reduce((s, r) => s + r.value, 0);
+    pieSlices.push({ label:'Other', name:`${others.length} small holdings`, value:ov, pct:ov/total*100, color:'#6B7280' });
+  }
+
+  /* ── 2. Style-box data ── */
+  const grid = {}; /* 'LG','LB',... → pct */
+  let intl = 0, em = 0, bonds = 0, other = 0;
+  h.forEach(r => {
+    const key = CP_CAT_MAP[r.cat] || 'OT';
+    const w = r.value / total * 100;
+    if      (key === 'IN') intl  += w;
+    else if (key === 'EM') em    += w;
+    else if (key === 'BD') bonds += w;
+    else if (key === 'OT') other += w;
+    else grid[key] = (grid[key] || 0) + w;
+  });
+
+  /* ── Build HTML with two canvas containers ── */
+  wrap.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <div style="font-family:'Playfair Display',serif;font-size:14px;font-weight:600;margin-bottom:12px;">Holdings Allocation</div>
+        <canvas id="cp-pie-canvas" style="width:100%;display:block;"></canvas>
+        <div id="cp-pie-legend" style="margin-top:12px;display:flex;flex-direction:column;gap:4px;"></div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;">
+        <div style="font-family:'Playfair Display',serif;font-size:14px;font-weight:600;margin-bottom:12px;">Style &amp; Geography Breakdown</div>
+        <div id="cp-style-wrap"></div>
+      </div>
+    </div>`;
+
+  /* Pie chart */
+  const pc = document.getElementById('cp-pie-canvas');
+  const W = Math.max(pc.closest('div').clientWidth - 32, 280);
+  const H = Math.min(W * 0.65, 220);
+  pc.width = W; pc.height = H;
+  const ctx = pc.getContext('2d');
+  const bgCol = getComputedStyle(document.documentElement).getPropertyValue('--surface').trim() || '#131e35';
+  ctx.fillStyle = bgCol; ctx.fillRect(0, 0, W, H);
+
+  const cx = W * 0.38, cy = H / 2;
+  const radius = Math.min(cx, cy) - 10;
+  const inner  = radius * 0.52;
+  let angle = -Math.PI / 2;
+  pieSlices.forEach(sl => {
+    const sweep = sl.pct / 100 * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, radius, angle, angle + sweep);
+    ctx.closePath();
+    ctx.fillStyle = sl.color; ctx.fill();
+    ctx.strokeStyle = bgCol; ctx.lineWidth = 2; ctx.stroke();
+    angle += sweep;
+  });
+  /* Donut hole */
+  ctx.beginPath(); ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+  ctx.fillStyle = bgCol; ctx.fill();
+  /* Center label */
+  ctx.fillStyle = '#E5E7EB'; ctx.font = `bold 13px DM Mono,monospace`; ctx.textAlign = 'center';
+  ctx.fillText(fmtM(total), cx, cy - 6);
+  ctx.fillStyle = '#6B7280'; ctx.font = `10px DM Mono,monospace`;
+  ctx.fillText('total', cx, cy + 10);
+
+  /* Legend */
+  const leg = document.getElementById('cp-pie-legend');
+  leg.innerHTML = pieSlices.map(sl => `
+    <div style="display:flex;align-items:center;gap:6px;font-size:11px;">
+      <span style="width:10px;height:10px;border-radius:2px;background:${sl.color};flex-shrink:0;display:inline-block;"></span>
+      <span style="font-family:'DM Mono',monospace;color:var(--accent);min-width:48px;">${escHtml(sl.label)}</span>
+      <span style="color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(sl.name)}">${escHtml(sl.name)}</span>
+      <span style="font-family:'DM Mono',monospace;color:var(--text);min-width:42px;text-align:right;">${sl.pct.toFixed(1)}%</span>
+    </div>`).join('');
+
+  /* ── Style box ── */
+  const sw = document.getElementById('cp-style-wrap');
+  const SIZES  = ['Large','Mid','Small'];
+  const STYLES = ['Value','Blend','Growth'];
+  const CODE   = {Large:{Value:'LV',Blend:'LB',Growth:'LG'},Mid:{Value:'MV',Blend:'MB',Growth:'MG'},Small:{Value:'SV',Blend:'SB',Growth:'SG'}};
+  const styleColor = { Value:'#3B82F6', Blend:'#10B981', Growth:'#F59E0B' };
+
+  const maxGridPct = Math.max(1, ...Object.values(grid));
+
+  const gridRows = SIZES.map(sz => `
+    <div style="display:contents;">
+      <div style="font-size:10px;color:var(--muted);display:flex;align-items:center;padding-right:6px;font-family:'DM Mono',monospace;">${sz}</div>
+      ${STYLES.map(st => {
+        const key = CODE[sz][st];
+        const pct = grid[key] || 0;
+        const intensity = pct / maxGridPct;
+        const col = styleColor[st];
+        return `<div style="border:1px solid var(--border);border-radius:4px;padding:8px 4px;text-align:center;
+            background:${col}${Math.round(intensity*40+8).toString(16).padStart(2,'0')};
+            position:relative;">
+          <div style="font-size:13px;font-weight:700;font-family:'DM Mono',monospace;color:${pct>2?'var(--text)':'var(--muted)'};">${pct>0?pct.toFixed(1)+'%':'·'}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:1px;">${sz.slice(0,2)} ${st.slice(0,2)}</div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+
+  const extraBars = [
+    { label:'Intl Developed', pct: intl,  color:'#06B6D4' },
+    { label:'Emerging Mkts',  pct: em,    color:'#8B5CF6' },
+    { label:'Bonds / Fixed',  pct: bonds, color:'#6B7280' },
+    { label:'Target/Other',   pct: other, color:'#9CA3AF' },
+  ].filter(b => b.pct > 0);
+
+  sw.innerHTML = `
+    <div style="margin-bottom:10px;">
+      <div style="display:grid;grid-template-columns:44px 1fr 1fr 1fr;gap:4px;margin-bottom:4px;">
+        <div></div>
+        ${STYLES.map(s=>`<div style="font-size:10px;color:${styleColor[s]};text-align:center;font-weight:600;font-family:'DM Mono',monospace;">${s}</div>`).join('')}
+      </div>
+      <div style="display:grid;grid-template-columns:44px 1fr 1fr 1fr;gap:4px;">
+        ${gridRows}
+      </div>
+    </div>
+    ${extraBars.length ? `
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:5px;">
+      ${extraBars.map(b => `
+        <div style="display:flex;align-items:center;gap:8px;font-size:11px;">
+          <span style="font-family:'DM Mono',monospace;color:var(--muted);min-width:96px;">${b.label}</span>
+          <div style="flex:1;background:var(--surface2);border-radius:3px;height:8px;">
+            <div style="width:${Math.min(100,b.pct).toFixed(1)}%;height:8px;border-radius:3px;background:${b.color};"></div>
+          </div>
+          <span style="font-family:'DM Mono',monospace;color:var(--text);min-width:36px;text-align:right;">${b.pct.toFixed(1)}%</span>
+        </div>`).join('')}
+    </div>` : ''}`;
 }
 
 /* ═══ NET WORTH ═══ */
