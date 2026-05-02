@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Database — local only, never commit
+database/portfolio.db
+database/*.db
+
+# Generated reports — rebuilt on demand
+reports/
+
+# Logs
+logs/
+
+# Raw brokerage downloads — personal financial data, never commit
+raw_downloads/fidelity/*.csv
+raw_downloads/fidelity/*.ofx
+raw_downloads/fidelity/*.qfx
+raw_downloads/fidelity/*.pdf
+raw_downloads/schwab/*.csv
+raw_downloads/schwab/*.ofx
+raw_downloads/schwab/*.qfx
+raw_downloads/schwab/*.pdf
+raw_downloads/vanguard/*.csv
+raw_downloads/vanguard/*.ofx
+raw_downloads/vanguard/*.qfx
+raw_downloads/vanguard/*.pdf
+
+# Processed text extracts
+processed/
+
+# macOS
+.DS_Store
+
+# LaunchAgent plist (user-specific paths inside)
+*.plist

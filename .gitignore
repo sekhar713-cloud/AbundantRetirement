@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# FinanceVault — never commit personal financial data or local DB
+FinanceVault/database/
+FinanceVault/logs/
+FinanceVault/reports/
+FinanceVault/processed/
+FinanceVault/raw_downloads/fidelity/*.csv
+FinanceVault/raw_downloads/fidelity/*.ofx
+FinanceVault/raw_downloads/fidelity/*.qfx
+FinanceVault/raw_downloads/fidelity/*.pdf
+FinanceVault/raw_downloads/schwab/*.csv
+FinanceVault/raw_downloads/schwab/*.ofx
+FinanceVault/raw_downloads/schwab/*.qfx
+FinanceVault/raw_downloads/schwab/*.pdf
+FinanceVault/raw_downloads/vanguard/*.csv
+FinanceVault/raw_downloads/vanguard/*.ofx
+FinanceVault/raw_downloads/vanguard/*.qfx
+FinanceVault/raw_downloads/vanguard/*.pdf
+FinanceVault/*.plist
+
+# macOS
+.DS_Store
