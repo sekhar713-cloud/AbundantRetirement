@@ -817,6 +817,42 @@ body {
     <div id="hc-content"></div>
   </div>
 
+  <!-- ═══ REBALANCE ═══ -->
+  <div id="tab-rebalance" class="tab-panel">
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent3);margin-bottom:6px;">Portfolio Rebalancing</div>
+          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:6px;">Avantis 5-Fund Target</div>
+          <div style="font-size:12px;color:var(--muted);">Taxable · Traditional · Roth — DCP excluded</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Annual Withdrawal ($)</label>
+            <input id="rb-burn" type="number" min="0" step="1000"
+              style="width:140px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-family:'DM Mono',monospace;font-size:13px;"
+              placeholder="0" oninput="buildRebalanceTab()">
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Drift Threshold (%)</label>
+            <input id="rb-threshold" type="number" min="1" max="20" step="0.5" value="5"
+              style="width:100px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:7px 10px;font-family:'DM Mono',monospace;font-size:13px;"
+              oninput="buildRebalanceTab()">
+          </div>
+        </div>
+      </div>
+      <!-- 5-fund target pills -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+        <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.3);border-radius:6px;padding:6px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#60A5FA;">AVLV <span style="color:var(--accent);font-weight:700;">25%</span></div>
+        <div style="background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);border-radius:6px;padding:6px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#FCD34D;">AVUV <span style="color:var(--accent);font-weight:700;">25%</span></div>
+        <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:6px;padding:6px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#34D399;">AVDE <span style="color:var(--accent);font-weight:700;">20%</span></div>
+        <div style="background:rgba(139,92,246,0.1);border:1px solid rgba(139,92,246,0.3);border-radius:6px;padding:6px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#A78BFA;">AVDV <span style="color:var(--accent);font-weight:700;">20%</span></div>
+        <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:6px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#F87171;">AVES <span style="color:var(--accent);font-weight:700;">10%</span></div>
+      </div>
+    </div>
+    <div id="rb-output"></div>
+  </div>
+
   <!-- ═══ ABOUT ═══ -->
   <!-- ═══ HOW TO USE ═══ -->
   <div id="tab-howto" class="tab-panel">
@@ -1102,7 +1138,7 @@ const tabDefs = [
   ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Financial Runway'],
   ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],
-['howto','How To Use'],['about','About']
+['rebalance','Rebalance'],['howto','How To Use'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -1115,6 +1151,7 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   const idx = tabDefs.findIndex(t => t[0]===id);
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
+  if (id === 'rebalance') buildRebalanceTab();
 }
 
 let lastModelEngine = 'factor';
@@ -4616,6 +4653,264 @@ buildTaxAlphaTimeline();
 buildCustomPortfolio();
 buildRothConvert();
 buildHealthcareBridge();
+
+/* ═══ REBALANCE TAB ═══ */
+function buildRebalanceTab() {
+  const out = document.getElementById('rb-output');
+  if (!out) return;
+
+  const RB_TARGETS = [
+    { ticker:'AVLV', pct:0.25, name:'Avantis US Large Cap Value',    color:'#60A5FA' },
+    { ticker:'AVUV', pct:0.25, name:'Avantis US Small Cap Value',    color:'#FCD34D' },
+    { ticker:'AVDE', pct:0.20, name:'Avantis Developed Markets',     color:'#34D399' },
+    { ticker:'AVDV', pct:0.20, name:'Avantis Intl Small Cap Value',  color:'#A78BFA' },
+    { ticker:'AVES', pct:0.10, name:'Avantis Emerging Markets Value', color:'#F87171' },
+  ];
+  const TARGET_SET = new Set(RB_TARGETS.map(t => t.ticker));
+  const ACCT_ORDER = ['Taxable','Traditional','Roth'];
+  const ACCT_COLOR = { Taxable:'var(--taxable-color)', Traditional:'var(--trad-color)', Roth:'var(--roth-color)' };
+
+  const holdings = customPort.holdings.filter(h =>
+    ACCT_ORDER.includes(h.acct) && (h.value||0) > 0
+  );
+
+  if (holdings.length === 0) {
+    out.innerHTML = `<div class="card" style="text-align:center;padding:48px 24px;">
+      <div style="font-size:32px;margin-bottom:12px;">📋</div>
+      <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--text);margin-bottom:8px;">No holdings yet</div>
+      <div style="font-size:13px;color:var(--muted);">Add holdings in the Starting Portfolio tab (Taxable, Traditional, or Roth) to generate rebalance recommendations.</div>
+    </div>`;
+    return;
+  }
+
+  /* Inputs */
+  const burnEl = document.getElementById('rb-burn');
+  const threshEl = document.getElementById('rb-threshold');
+  const defaultBurn = burnState.cats.reduce((s,c) => s + c.s1*12, 0);
+  if (burnEl && burnEl.value === '' && defaultBurn > 0) burnEl.value = Math.round(defaultBurn);
+  const annualBurn   = burnEl ? (parseFloat(burnEl.value)||0) : defaultBurn;
+  const driftThresh  = threshEl ? (parseFloat(threshEl.value)||5)/100 : 0.05;
+
+  /* Aggregate per ticker and account */
+  const byTicker = {}; // ticker → { Taxable, Traditional, Roth, total, shares }
+  const otherByAcct = { Taxable:0, Traditional:0, Roth:0 };
+  const otherList = [];
+
+  holdings.forEach(h => {
+    const tk = (h.ticker||'').toUpperCase().trim();
+    const v  = h.value||0;
+    if (TARGET_SET.has(tk)) {
+      if (!byTicker[tk]) byTicker[tk] = { Taxable:0, Traditional:0, Roth:0, total:0, shares:0 };
+      byTicker[tk][h.acct] += v;
+      byTicker[tk].total   += v;
+      byTicker[tk].shares  += (h.shares||0);
+    } else {
+      otherByAcct[h.acct] += v;
+      otherList.push(h);
+    }
+  });
+
+  const totalCurrent  = holdings.reduce((s,h) => s+(h.value||0), 0);
+  const adjustedTotal = Math.max(0, totalCurrent - annualBurn);
+
+  /* Per-ticker analysis */
+  const analysis = RB_TARGETS.map(t => {
+    const curr     = byTicker[t.ticker]?.total || 0;
+    const target$  = t.pct * adjustedTotal;
+    const drift$   = curr - target$;
+    const currPct  = totalCurrent > 0 ? curr/totalCurrent : 0;
+    const driftPct = currPct - t.pct;
+    const action   = Math.abs(driftPct) < driftThresh ? 'OK' : (drift$ > 0 ? 'SELL' : 'BUY');
+    return { ...t, curr, target$, drift$, currPct, driftPct, action,
+             byAcct: byTicker[t.ticker] || { Taxable:0, Traditional:0, Roth:0 } };
+  });
+
+  const otherTotal = otherList.reduce((s,h) => s+(h.value||0), 0);
+  const fmtD = v => '$' + Math.abs(Math.round(v)).toLocaleString();
+  const fmtP = v => (v*100).toFixed(1)+'%';
+  const sign  = v => v > 0 ? '+' : '';
+
+  /* ── Allocation snapshot table ── */
+  let snapRows = analysis.map(a => {
+    const dColor = a.action==='SELL' ? '#F87171' : a.action==='BUY' ? '#34D399' : 'var(--muted)';
+    const badge  = a.action==='SELL'
+      ? `<span style="background:rgba(239,68,68,0.15);color:#F87171;border-radius:4px;padding:2px 8px;font-size:10px;font-family:'DM Mono',monospace;">SELL</span>`
+      : a.action==='BUY'
+      ? `<span style="background:rgba(16,185,129,0.15);color:#34D399;border-radius:4px;padding:2px 8px;font-size:10px;font-family:'DM Mono',monospace;">BUY</span>`
+      : `<span style="background:rgba(255,255,255,0.06);color:var(--muted);border-radius:4px;padding:2px 8px;font-size:10px;font-family:'DM Mono',monospace;">OK</span>`;
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;color:${a.color};">${a.ticker}</td>
+      <td style="color:var(--muted);font-size:12px;">${a.name}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;">${fmtD(a.curr)}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;color:var(--muted);">${fmtP(a.currPct)}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;color:var(--accent);">${fmtP(a.pct)}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;color:${dColor};">${sign(a.drift$)}${fmtD(a.drift$)}</td>
+      <td style="text-align:center;">${badge}</td>
+    </tr>`;
+  }).join('');
+
+  if (otherTotal > 0) {
+    snapRows += `<tr style="border-top:1px solid var(--border);opacity:0.7;">
+      <td style="font-family:'DM Mono',monospace;color:var(--muted);">OTHER</td>
+      <td style="color:var(--muted);font-size:12px;">${otherList.length} non-target holding${otherList.length!==1?'s':''}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;">${fmtD(otherTotal)}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;color:var(--muted);">${fmtP(otherTotal/totalCurrent)}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;color:var(--accent);">—</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;color:#F87171;">Liquidate</td>
+      <td style="text-align:center;"><span style="background:rgba(239,68,68,0.15);color:#F87171;border-radius:4px;padding:2px 8px;font-size:10px;font-family:'DM Mono',monospace;">SELL</span></td>
+    </tr>`;
+  }
+
+  /* ── Sell plan: taxable first, then Trad, then Roth ── */
+  /* Build per-account sell lists */
+  const sellPlan = { Taxable:[], Traditional:[], Roth:[] };
+
+  /* 1. Other holdings: sell fully (taxable first) */
+  ACCT_ORDER.forEach(acct => {
+    otherList.filter(h => h.acct===acct).forEach(h => {
+      sellPlan[acct].push({ ticker: h.ticker||'—', name: h.fundName||'', amount: h.value||0, shares: h.shares||0, reason:'Non-target' });
+    });
+  });
+
+  /* 2. Overweight target tickers: sell excess (taxable first) */
+  analysis.filter(a => a.action==='SELL').forEach(a => {
+    let need = Math.abs(a.drift$);
+    ACCT_ORDER.forEach(acct => {
+      if (need <= 0) return;
+      const avail = a.byAcct[acct]||0;
+      if (avail <= 0) return;
+      const amt = Math.min(need, avail);
+      sellPlan[acct].push({ ticker: a.ticker, name: a.name, amount: amt, shares: 0, reason:'Overweight' });
+      need -= amt;
+    });
+  });
+
+  /* 3. Burn allocation (taxable first) — shown separately */
+  let burnLeft = annualBurn;
+  const burnPlan = [];
+  ACCT_ORDER.forEach(acct => {
+    if (burnLeft <= 0) return;
+    const acctTotal = holdings.filter(h => h.acct===acct).reduce((s,h) => s+(h.value||0), 0);
+    const amt = Math.min(burnLeft, acctTotal);
+    if (amt > 0.01) { burnPlan.push({ acct, amount: amt }); burnLeft -= amt; }
+  });
+
+  const sellTotal = ACCT_ORDER.reduce((s,acct) => s + sellPlan[acct].reduce((t,r) => t+r.amount, 0), 0);
+
+  let sellRows = '';
+  ACCT_ORDER.forEach(acct => {
+    if (sellPlan[acct].length === 0) return;
+    sellPlan[acct].forEach(r => {
+      sellRows += `<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:10px;font-weight:600;color:${ACCT_COLOR[acct]};">${acct.toUpperCase()}</td>
+        <td style="font-family:'DM Mono',monospace;font-weight:600;">${r.ticker}</td>
+        <td style="color:var(--muted);font-size:12px;">${r.name}</td>
+        <td style="font-family:'DM Mono',monospace;text-align:right;color:#F87171;">${fmtD(r.amount)}</td>
+        <td style="font-size:11px;color:var(--muted);">${r.reason}</td>
+      </tr>`;
+    });
+  });
+
+  if (!sellRows) sellRows = `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">No sells required — portfolio is within drift threshold.</td></tr>`;
+
+  /* ── Buy plan ── */
+  const buyItems = analysis.filter(a => a.action==='BUY');
+  const buyTotal = buyItems.reduce((s,a) => s + Math.abs(a.drift$), 0);
+  let buyRows = buyItems.map(a => `<tr>
+    <td style="font-family:'DM Mono',monospace;font-weight:600;color:${a.color};">${a.ticker}</td>
+    <td style="color:var(--muted);font-size:12px;">${a.name}</td>
+    <td style="font-family:'DM Mono',monospace;text-align:right;color:#34D399;">${fmtD(Math.abs(a.drift$))}</td>
+  </tr>`).join('');
+  if (!buyRows) buyRows = `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:20px;font-size:13px;">No buys required — all positions at or above target.</td></tr>`;
+
+  /* ── Account breakdown ── */
+  let acctRows = ACCT_ORDER.map(acct => {
+    const acctHoldings = holdings.filter(h => h.acct===acct);
+    const acctTotal = acctHoldings.reduce((s,h) => s+(h.value||0), 0);
+    if (acctTotal === 0) return '';
+    const cells = RB_TARGETS.map(t => {
+      const v = byTicker[t.ticker]?.[acct]||0;
+      return `<td style="font-family:'DM Mono',monospace;text-align:right;font-size:12px;">${v>0?fmtD(v):'—'}</td>`;
+    }).join('');
+    const otherInAcct = otherList.filter(h=>h.acct===acct).reduce((s,h)=>s+(h.value||0),0);
+    return `<tr>
+      <td style="font-family:'DM Mono',monospace;font-weight:600;color:${ACCT_COLOR[acct]};font-size:11px;">${acct.toUpperCase()}</td>
+      ${cells}
+      <td style="font-family:'DM Mono',monospace;text-align:right;font-size:12px;color:var(--muted);">${otherInAcct>0?fmtD(otherInAcct):'—'}</td>
+      <td style="font-family:'DM Mono',monospace;text-align:right;font-weight:600;">${fmtD(acctTotal)}</td>
+    </tr>`;
+  }).join('');
+
+  /* ── Burn note ── */
+  let burnNote = '';
+  if (annualBurn > 0) {
+    const bRows = burnPlan.map(b =>
+      `<span style="font-family:'DM Mono',monospace;font-size:12px;background:rgba(255,255,255,0.05);border-radius:4px;padding:4px 10px;color:${ACCT_COLOR[b.acct]};">${b.acct}: ${fmtD(b.amount)}</span>`
+    ).join(' ');
+    burnNote = `<div class="card" style="margin-bottom:16px;background:rgba(200,151,42,0.07);border:1px solid rgba(200,151,42,0.2);">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">Annual Withdrawal — ${fmtD(annualBurn)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Sourced from taxable first, then tax-advantaged. This amount is excluded from target allocation math.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${bRows}</div>
+    </div>`;
+  }
+
+  out.innerHTML = burnNote + `
+  <div class="card" style="margin-bottom:16px;overflow-x:auto;">
+    <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);margin-bottom:14px;">Current vs. Target — ${fmtD(totalCurrent)} total · ${fmtD(adjustedTotal)} adjusted</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">TICKER</th>
+        <th style="text-align:left;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">FUND</th>
+        <th style="text-align:right;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">CURRENT</th>
+        <th style="text-align:right;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">CURR %</th>
+        <th style="text-align:right;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">TARGET %</th>
+        <th style="text-align:right;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">DRIFT</th>
+        <th style="text-align:center;padding:8px 6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">ACTION</th>
+      </tr></thead>
+      <tbody>${snapRows}</tbody>
+    </table>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+    <div class="card" style="overflow-x:auto;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#F87171;margin-bottom:14px;">Sell — ${fmtD(sellTotal)}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">ACCT</th>
+          <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">TICKER</th>
+          <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">FUND</th>
+          <th style="text-align:right;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">AMOUNT</th>
+          <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">REASON</th>
+        </tr></thead>
+        <tbody>${sellRows}</tbody>
+      </table>
+    </div>
+    <div class="card" style="overflow-x:auto;">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#34D399;margin-bottom:14px;">Buy — ${fmtD(buyTotal)}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead><tr style="border-bottom:1px solid var(--border);">
+          <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">TICKER</th>
+          <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">FUND</th>
+          <th style="text-align:right;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">AMOUNT</th>
+        </tr></thead>
+        <tbody>${buyRows}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="overflow-x:auto;">
+    <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);margin-bottom:14px;">Account Breakdown</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">ACCOUNT</th>
+        ${RB_TARGETS.map(t=>`<th style="text-align:right;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:${t.color};">${t.ticker}</th>`).join('')}
+        <th style="text-align:right;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">OTHER</th>
+        <th style="text-align:right;padding:6px 4px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);">TOTAL</th>
+      </tr></thead>
+      <tbody>${acctRows}</tbody>
+    </table>
+  </div>`;
+}
 </script>
 
 <!-- Floating feedback button -->
