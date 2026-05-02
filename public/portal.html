@@ -962,19 +962,45 @@ body {
 
     <!-- Offline panel -->
     <div id="vt-offline" style="display:none;">
-      <div class="card" style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);">
-        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#F87171;margin-bottom:14px;">Server not running</div>
-        <div style="font-size:13px;color:var(--muted);line-height:1.85;margin-bottom:20px;">
-          The local FinanceVault server is not reachable. Start it in a terminal, then click Reconnect above.
+
+      <!-- Option A — auto-start (recommended) -->
+      <div class="card" style="margin-bottom:16px;background:rgba(13,115,119,0.06);border:1px solid rgba(13,115,119,0.25);">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">★</div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--text);">Auto-start on login <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--accent3);margin-left:6px;">recommended</span></div>
+            <div style="font-size:12px;color:var(--muted);">Run once — server starts automatically every time your Mac boots. No terminal needed ever again.</div>
+          </div>
         </div>
-        <div style="background:#040d1a;border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:'DM Mono',monospace;font-size:12px;color:var(--accent3);line-height:2;">
-          <span style="color:var(--muted);"># Terminal — run once per session</span><br>
-          cd /Users/kasturibonam/AIProjects/FinanceVault<br>
-          python3 server.py<br>
-          <span style="color:var(--muted);"># Then click ↺ Reconnect above</span>
+        <div style="background:#040d1a;border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:12px;">
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:6px;"># paste in Terminal — one time only</div>
+          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--accent3);line-height:2;">
+            cd /Users/kasturibonam/AIProjects/FinanceVault<br>
+            python3 main.py install-service
+          </div>
         </div>
-        <div style="margin-top:16px;font-size:12px;color:var(--muted);">
-          The server runs at <code style="font-family:'DM Mono',monospace;color:var(--accent);">http://127.0.0.1:8765</code> and never sends data outside your laptop.
+        <button class="vt-btn secondary" onclick="vaultCopyInstall()" style="font-size:11px;">
+          📋 Copy command
+        </button>
+        <span id="vt-copy-ok" style="font-family:'DM Mono',monospace;font-size:11px;color:#34D399;margin-left:10px;display:none;">Copied!</span>
+      </div>
+
+      <!-- Option B — manual start this session -->
+      <div class="card" style="background:rgba(239,68,68,0.04);border:1px solid rgba(239,68,68,0.15);">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#F87171;margin-bottom:12px;">Or start manually (this session only)</div>
+        <div style="background:#040d1a;border:1px solid var(--border);border-radius:8px;padding:14px 18px;margin-bottom:12px;">
+          <div style="font-family:'DM Mono',monospace;font-size:13px;color:var(--accent3);line-height:2;">
+            cd /Users/kasturibonam/AIProjects/FinanceVault<br>
+            python3 server.py
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+          <button class="vt-btn secondary" onclick="vaultCopyStart()" style="font-size:11px;">📋 Copy command</button>
+          <span style="font-size:12px;color:var(--muted);">Then click</span>
+          <button class="vt-btn primary" onclick="vaultCheckConnection()" style="font-size:11px;">↺ Reconnect</button>
+        </div>
+        <div style="margin-top:14px;font-size:12px;color:var(--muted);">
+          Runs at <code style="font-family:'DM Mono',monospace;color:var(--accent);">http://127.0.0.1:8765</code> — data never leaves your laptop.
         </div>
       </div>
     </div>
@@ -5178,6 +5204,8 @@ async function vaultCheckConnection() {
     vaultRefreshLog();
     vaultLoadFiles();
     vaultPollJob(data.job || {});
+    /* Once connected, stop the offline wait-poll */
+    if (VAULT.waitTimer) { clearInterval(VAULT.waitTimer); VAULT.waitTimer = null; }
   } catch {
     vaultSetConnected(false);
   }
@@ -5370,14 +5398,48 @@ async function vaultUpload(file) {
   }
 }
 
+function vaultCopyInstall() {
+  const cmd = 'cd /Users/kasturibonam/AIProjects/FinanceVault && python3 main.py install-service';
+  navigator.clipboard.writeText(cmd).then(() => {
+    const el = document.getElementById('vt-copy-ok');
+    if (el) { el.style.display = 'inline'; setTimeout(() => el.style.display = 'none', 2500); }
+  });
+}
+
+function vaultCopyStart() {
+  navigator.clipboard.writeText(
+    'cd /Users/kasturibonam/AIProjects/FinanceVault && python3 server.py'
+  );
+}
+
+/* Poll every 3s while offline until the server comes up */
+function vaultStartWaitingForServer() {
+  if (VAULT.waitTimer) return;
+  VAULT.waitTimer = setInterval(async () => {
+    try {
+      const data = await vaultFetch('/api/status');
+      clearInterval(VAULT.waitTimer);
+      VAULT.waitTimer = null;
+      vaultSetConnected(true);
+      vaultRenderStats(data.db || {});
+      vaultLoadHoldings();
+      vaultRefreshLog();
+      vaultLoadFiles();
+    } catch { /* still offline */ }
+  }, 3000);
+}
+
 function vaultOnShow() {
-  vaultCheckConnection();
-  /* Stop polling when user navigates away */
+  VAULT.waitTimer = null;
+  vaultCheckConnection().then(() => {
+    if (!VAULT.connected) vaultStartWaitingForServer();
+  });
+  /* Stop all timers when user leaves this tab */
   const observer = new MutationObserver(() => {
     const panel = document.getElementById('tab-vault');
-    if (!panel?.classList.contains('active') && VAULT.pollTimer) {
-      clearInterval(VAULT.pollTimer);
-      VAULT.pollTimer = null;
+    if (!panel?.classList.contains('active')) {
+      clearInterval(VAULT.pollTimer); VAULT.pollTimer = null;
+      clearInterval(VAULT.waitTimer); VAULT.waitTimer = null;
     }
   });
   observer.observe(document.getElementById('tab-vault'), { attributes: true });
