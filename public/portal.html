@@ -850,6 +850,62 @@ body {
         <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:6px;padding:6px 14px;font-family:'DM Mono',monospace;font-size:11px;color:#F87171;">AVES <span style="color:var(--accent);font-weight:700;">10%</span></div>
       </div>
     </div>
+    <!-- Quarterly rebalancing instructions -->
+    <div class="card" style="margin-bottom:16px;background:rgba(13,115,119,0.06);border:1px solid rgba(13,115,119,0.2);">
+      <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent3);margin-bottom:14px;">Quarterly Rebalancing — Step by Step</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;">
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">Update your holdings</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.75;padding-left:38px;">Go to <strong style="color:var(--text);">Starting Portfolio</strong> and update each holding's dollar value to reflect today's account balances. If you use the XLSX import, re-upload your latest brokerage export. Shares × price = current value for each position.</div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">Set your annual withdrawal</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.75;padding-left:38px;">Enter the amount you plan to withdraw this year (pre-filled from your Stage 1 burn rate). This is deducted from total portfolio value before computing target allocations — the remaining balance is what gets rebalanced.</div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">Review the drift table</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.75;padding-left:38px;">Any position showing <span style="color:#F87171;font-family:'DM Mono',monospace;font-size:11px;">SELL</span> or <span style="color:#34D399;font-family:'DM Mono',monospace;font-size:11px;">BUY</span> has drifted beyond the threshold. <span style="color:rgba(255,255,255,0.5);">OK</span> positions need no action. Tighten the drift threshold to catch smaller imbalances; loosen it to reduce turnover.</div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">4</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">Execute sells — taxable first</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.75;padding-left:38px;">Follow the <strong style="color:#F87171;">Sell</strong> plan. Taxable account sells are listed first because proceeds fund the annual withdrawal; tax-advantaged sells follow for pure rebalancing. Non-target holdings are liquidated before trimming overweight target positions.</div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">5</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">Place buys</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.75;padding-left:38px;">Deploy the <strong style="color:#34D399;">Buy</strong> amounts into underweight positions. For tax efficiency, prefer buying international and EM funds (AVDE, AVDV, AVES) inside Roth or Traditional — their higher expected return compounds tax-free. US value (AVLV, AVUV) is fine in taxable.</div>
+        </div>
+
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <div style="width:28px;height:28px;border-radius:50%;background:rgba(200,151,42,0.8);color:#0a1628;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">!</div>
+            <div style="font-size:13px;font-weight:600;color:var(--accent);">Tax notes</div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.75;padding-left:38px;">Sells inside Traditional or Roth have <strong style="color:var(--text);">no tax consequence</strong> — rebalance freely there. Taxable sells may trigger capital gains; hold positions longer than 1 year for long-term rates (0/15/20%). Consider harvesting losses in taxable before year-end to offset gains.</div>
+        </div>
+
+      </div>
+    </div>
+
     <div id="rb-output"></div>
   </div>
 
