@@ -332,6 +332,32 @@ body {
 #tab-howto .ht-cta p { color:var(--muted); font-size:13px; line-height:1.7; max-width:460px; margin:0 auto 24px; }
 #tab-howto .ht-cta-btn { display:inline-block; background:var(--surface2); color:var(--accent); text-decoration:none; padding:12px 32px; border-radius:6px; font-weight:500; font-size:13px; letter-spacing:0.5px; border:1px solid var(--accent); cursor:pointer; transition:all 0.2s; }
 #tab-howto .ht-cta-btn:hover { background:var(--accent); color:var(--bg); }
+/* ── Local Vault tab ── */
+.vt-status-dot { width:10px; height:10px; border-radius:50%; display:inline-block; margin-right:8px; flex-shrink:0; }
+.vt-status-dot.online  { background:#22C55E; box-shadow:0 0 0 3px rgba(34,197,94,0.2); }
+.vt-status-dot.offline { background:#6B7280; }
+.vt-status-dot.checking { background:#F59E0B; animation:pulse 1.2s infinite; }
+.vt-btn { display:inline-flex; align-items:center; gap:7px; padding:9px 20px; border-radius:6px; font-family:'DM Mono',monospace; font-size:12px; font-weight:500; cursor:pointer; border:none; transition:all 0.18s; letter-spacing:0.3px; }
+.vt-btn:disabled { opacity:0.45; cursor:not-allowed; }
+.vt-btn.primary { background:var(--accent); color:#0a1628; }
+.vt-btn.primary:hover:not(:disabled) { background:#d4a843; }
+.vt-btn.secondary { background:var(--surface2); color:var(--text); border:1px solid var(--border); }
+.vt-btn.secondary:hover:not(:disabled) { background:#1e3460; }
+.vt-btn.danger { background:rgba(239,68,68,0.15); color:#F87171; border:1px solid rgba(239,68,68,0.3); }
+.vt-log { background:#040d1a; border:1px solid var(--border); border-radius:8px; padding:14px 16px; font-family:'DM Mono',monospace; font-size:11px; line-height:1.7; color:rgba(255,255,255,0.55); max-height:260px; overflow-y:auto; white-space:pre-wrap; }
+.vt-log .log-info  { color:rgba(255,255,255,0.55); }
+.vt-log .log-warn  { color:#FCD34D; }
+.vt-log .log-error { color:#F87171; }
+.vt-log .log-ok    { color:#34D399; }
+.vt-table { width:100%; border-collapse:collapse; font-size:13px; }
+.vt-table th { font-family:'DM Mono',monospace; font-size:10px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); padding:8px 10px; text-align:left; border-bottom:1px solid var(--border); }
+.vt-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.04); }
+.vt-table tr:hover td { background:rgba(255,255,255,0.02); }
+.vt-drop { border:2px dashed var(--border); border-radius:10px; padding:28px; text-align:center; cursor:pointer; transition:all 0.2s; }
+.vt-drop.dragover { border-color:var(--accent3); background:rgba(13,115,119,0.07); }
+.vt-stat { background:var(--surface2); border:1px solid var(--border); border-radius:8px; padding:14px 18px; }
+.vt-stat-val { font-family:'Playfair Display',serif; font-size:22px; font-weight:700; color:var(--text); }
+.vt-stat-lbl { font-family:'DM Mono',monospace; font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-top:4px; }
 /* ── Portfolio Growth ── */
 </style>
 </head>
@@ -909,6 +935,142 @@ body {
     <div id="rb-output"></div>
   </div>
 
+  <!-- ═══ LOCAL VAULT ═══ -->
+  <div id="tab-vault" class="tab-panel">
+
+    <!-- Header -->
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent3);margin-bottom:6px;">Local Portfolio OS</div>
+          <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:var(--text);margin-bottom:4px;">FinanceVault Sync</div>
+          <div style="display:flex;align-items:center;margin-top:6px;">
+            <span class="vt-status-dot checking" id="vt-dot"></span>
+            <span id="vt-status-text" style="font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);">Connecting to local server…</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);">localhost:</span>
+          <input id="vt-port" type="number" value="8765" min="1024" max="65535"
+            style="width:80px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                   color:var(--text);padding:6px 8px;font-family:'DM Mono',monospace;font-size:12px;"
+            onchange="vaultCheckConnection()">
+          <button class="vt-btn secondary" onclick="vaultCheckConnection()">↺ Reconnect</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Offline panel -->
+    <div id="vt-offline" style="display:none;">
+      <div class="card" style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.2);">
+        <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#F87171;margin-bottom:14px;">Server not running</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.85;margin-bottom:20px;">
+          The local FinanceVault server is not reachable. Start it in a terminal, then click Reconnect above.
+        </div>
+        <div style="background:#040d1a;border:1px solid var(--border);border-radius:8px;padding:16px 20px;font-family:'DM Mono',monospace;font-size:12px;color:var(--accent3);line-height:2;">
+          <span style="color:var(--muted);"># Terminal — run once per session</span><br>
+          cd /Users/kasturibonam/AIProjects/FinanceVault<br>
+          python3 server.py<br>
+          <span style="color:var(--muted);"># Then click ↺ Reconnect above</span>
+        </div>
+        <div style="margin-top:16px;font-size:12px;color:var(--muted);">
+          The server runs at <code style="font-family:'DM Mono',monospace;color:var(--accent);">http://127.0.0.1:8765</code> and never sends data outside your laptop.
+        </div>
+      </div>
+    </div>
+
+    <!-- Online panel -->
+    <div id="vt-online" style="display:none;">
+
+      <!-- DB stats row -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;" id="vt-stats-grid"></div>
+
+      <!-- Sync controls + file upload -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+
+        <!-- Pipeline controls -->
+        <div class="card">
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);margin-bottom:14px;">Run Pipeline</div>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="vt-btn primary" id="vt-btn-ingest" onclick="vaultRun('ingest')">▶ Ingest Files</button>
+              <span style="font-size:11px;color:var(--muted);">Parse new downloads</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="vt-btn secondary" id="vt-btn-build" onclick="vaultRun('build')">▶ Build Portfolio</button>
+              <span style="font-size:11px;color:var(--muted);">Recompute lots &amp; gains</span>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button class="vt-btn secondary" id="vt-btn-report" onclick="vaultRun('report')">▶ Generate Reports</button>
+              <span style="font-size:11px;color:var(--muted);">Write CSVs + summary</span>
+            </div>
+          </div>
+          <div id="vt-job-status" style="margin-top:12px;display:none;font-family:'DM Mono',monospace;font-size:11px;color:#FCD34D;">
+            ⏳ Running…
+          </div>
+        </div>
+
+        <!-- File upload -->
+        <div class="card">
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);margin-bottom:14px;">Upload Brokerage File</div>
+          <div style="margin-bottom:10px;">
+            <label style="font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;display:block;margin-bottom:5px;">Broker</label>
+            <select id="vt-upload-broker"
+              style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+                     color:var(--text);padding:7px 10px;font-family:'DM Mono',monospace;font-size:12px;">
+              <option value="fidelity">Fidelity</option>
+              <option value="schwab">Schwab</option>
+              <option value="vanguard">Vanguard</option>
+            </select>
+          </div>
+          <div class="vt-drop" id="vt-drop-zone"
+            onclick="document.getElementById('vt-file-input').click()"
+            ondragover="event.preventDefault();this.classList.add('dragover')"
+            ondragleave="this.classList.remove('dragover')"
+            ondrop="event.preventDefault();this.classList.remove('dragover');vaultUpload(event.dataTransfer.files[0])">
+            <div style="font-size:22px;margin-bottom:6px;">📂</div>
+            <div style="font-size:12px;color:var(--muted);">Drop CSV / OFX / QFX here<br>or click to browse</div>
+            <input type="file" id="vt-file-input" accept=".csv,.ofx,.qfx,.pdf" style="display:none;"
+              onchange="vaultUpload(this.files[0]);this.value=''">
+          </div>
+          <div id="vt-upload-status" style="margin-top:8px;font-family:'DM Mono',monospace;font-size:11px;display:none;"></div>
+        </div>
+      </div>
+
+      <!-- Run log -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);">Run Log</div>
+          <button class="vt-btn secondary" style="padding:4px 12px;font-size:10px;" onclick="vaultRefreshLog()">↺ Refresh</button>
+        </div>
+        <div class="vt-log" id="vt-log-box">Waiting for log…</div>
+      </div>
+
+      <!-- Holdings table -->
+      <div class="card" style="margin-bottom:16px;overflow-x:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);">Current Holdings <span id="vt-holdings-total" style="color:var(--accent);margin-left:8px;"></span></div>
+          <button class="vt-btn secondary" style="padding:4px 12px;font-size:10px;" onclick="vaultLoadHoldings()">↺ Refresh</button>
+        </div>
+        <div id="vt-holdings-wrap">
+          <div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;">Loading holdings…</div>
+        </div>
+      </div>
+
+      <!-- File inventory -->
+      <div class="card" style="overflow-x:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+          <div style="font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);">File Inventory</div>
+          <button class="vt-btn secondary" style="padding:4px 12px;font-size:10px;" onclick="vaultLoadFiles()">↺ Refresh</button>
+        </div>
+        <div id="vt-files-wrap">
+          <div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Loading…</div>
+        </div>
+      </div>
+
+    </div><!-- /vt-online -->
+  </div><!-- /tab-vault -->
+
   <!-- ═══ ABOUT ═══ -->
   <!-- ═══ HOW TO USE ═══ -->
   <div id="tab-howto" class="tab-panel">
@@ -1194,7 +1356,7 @@ const tabDefs = [
   ['overview','Starting Portfolio'],['networth','Liquid Net Worth'],['burn','Burn Stages'],['retirement','Financial Runway'],
   ['montecarlo','Monte Carlo'],['location','Location Alpha'],['rothconvert','Roth Convert'],['tax','Tax Alpha'],
   ['estate','Estate Alpha'],['taxcalc','Tax Calc'],['healthcare','Healthcare Bridge'],
-['rebalance','Rebalance'],['howto','How To Use'],['about','About']
+['rebalance','Rebalance'],['vault','Local Vault'],['howto','How To Use'],['about','About']
 ];
 
 document.getElementById('tab-bar').innerHTML = tabDefs.map(([id,name],i) =>
@@ -1208,6 +1370,7 @@ function showTab(id) {
   const idx = tabDefs.findIndex(t => t[0]===id);
   if (idx >= 0) document.querySelectorAll('.tab')[idx].classList.add('active');
   if (id === 'rebalance') buildRebalanceTab();
+  if (id === 'vault') vaultOnShow();
 }
 
 let lastModelEngine = 'factor';
@@ -4966,6 +5129,258 @@ function buildRebalanceTab() {
       <tbody>${acctRows}</tbody>
     </table>
   </div>`;
+}
+
+/* ═══ LOCAL VAULT TAB ═══ */
+const VAULT = {
+  base: () => `http://127.0.0.1:${document.getElementById('vt-port')?.value || 8765}`,
+  pollTimer: null,
+  connected: false,
+};
+
+async function vaultFetch(path, opts = {}) {
+  const r = await fetch(VAULT.base() + path, { ...opts, signal: AbortSignal.timeout(4000) });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+function vaultSetConnected(ok) {
+  VAULT.connected = ok;
+  const dot  = document.getElementById('vt-dot');
+  const text = document.getElementById('vt-status-text');
+  const offline = document.getElementById('vt-offline');
+  const online  = document.getElementById('vt-online');
+  if (!dot || !offline || !online) return;
+
+  if (ok) {
+    dot.className = 'vt-status-dot online';
+    text.textContent = 'Connected to local server';
+    offline.style.display = 'none';
+    online.style.display  = '';
+  } else {
+    dot.className = 'vt-status-dot offline';
+    text.textContent = 'Server offline — see instructions below';
+    offline.style.display = '';
+    online.style.display  = 'none';
+  }
+}
+
+async function vaultCheckConnection() {
+  const dot  = document.getElementById('vt-dot');
+  const text = document.getElementById('vt-status-text');
+  if (dot) dot.className = 'vt-status-dot checking';
+  if (text) text.textContent = 'Connecting…';
+  try {
+    const data = await vaultFetch('/api/status');
+    vaultSetConnected(true);
+    vaultRenderStats(data.db || {});
+    vaultLoadHoldings();
+    vaultRefreshLog();
+    vaultLoadFiles();
+    vaultPollJob(data.job || {});
+  } catch {
+    vaultSetConnected(false);
+  }
+}
+
+function vaultRenderStats(db) {
+  const grid = document.getElementById('vt-stats-grid');
+  if (!grid) return;
+  const items = [
+    { val: db.accounts      || 0,  lbl: 'Accounts' },
+    { val: db.transactions  || 0,  lbl: 'Transactions' },
+    { val: db.open_lots     || 0,  lbl: 'Open Lots' },
+    { val: db.dividends     || 0,  lbl: 'Dividends' },
+    { val: `$${(db.realized_gains || 0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})}`,
+      lbl: 'Realized Gains' },
+    { val: `$${(db.total_dividends || 0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})}`,
+      lbl: 'Div Income' },
+  ];
+  grid.innerHTML = items.map(i => `
+    <div class="vt-stat">
+      <div class="vt-stat-val">${i.val}</div>
+      <div class="vt-stat-lbl">${i.lbl}</div>
+    </div>`).join('');
+}
+
+async function vaultLoadHoldings() {
+  const wrap  = document.getElementById('vt-holdings-wrap');
+  const total = document.getElementById('vt-holdings-total');
+  if (!wrap) return;
+  try {
+    const data = await vaultFetch('/api/holdings');
+    const hs = data.holdings || [];
+    if (total) total.textContent = `$${(data.total_cost||0).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:0})} cost basis`;
+
+    const ACCT_COLOR = { taxable:'var(--taxable-color)', traditional_ira:'var(--trad-color)', roth_ira:'var(--roth-color)' };
+    const rows = hs.map(h => {
+      const ac = ACCT_COLOR[h.account_type] || 'var(--text)';
+      return `<tr>
+        <td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--accent);">${h.ticker}</td>
+        <td style="font-size:12px;color:var(--muted);max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${h.description||''}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;font-weight:600;color:${ac};">${(h.account_type||'').replace('_',' ')}</td>
+        <td style="font-family:'DM Mono',monospace;color:var(--muted);font-size:11px;">${h.broker}</td>
+        <td style="font-family:'DM Mono',monospace;text-align:right;">${(h.quantity||0).toFixed(4)}</td>
+        <td style="font-family:'DM Mono',monospace;text-align:right;">$${(h.avg_cost||0).toFixed(2)}</td>
+        <td style="font-family:'DM Mono',monospace;text-align:right;font-weight:600;">$${(h.total_cost||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+        <td style="font-family:'DM Mono',monospace;text-align:right;color:var(--muted);">${(h.pct_of_total||0).toFixed(1)}%</td>
+        <td style="font-size:11px;color:var(--accent3);">${h.asset_class||''}</td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = hs.length ? `
+      <table class="vt-table">
+        <thead><tr>
+          <th>Ticker</th><th>Fund</th><th>Account Type</th><th>Broker</th>
+          <th style="text-align:right;">Qty</th><th style="text-align:right;">Avg Cost</th>
+          <th style="text-align:right;">Cost Basis</th><th style="text-align:right;">% of Total</th>
+          <th>Asset Class</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` :
+      `<div style="text-align:center;padding:32px;color:var(--muted);font-size:13px;">
+         No holdings yet. Run Ingest → Build to populate.
+       </div>`;
+  } catch(e) {
+    wrap.innerHTML = `<div style="color:#F87171;font-size:12px;padding:16px;">Failed to load holdings: ${e.message}</div>`;
+  }
+}
+
+async function vaultLoadFiles() {
+  const wrap = document.getElementById('vt-files-wrap');
+  if (!wrap) return;
+  try {
+    const data = await vaultFetch('/api/files');
+    const files = data.files || [];
+    if (!files.length) {
+      wrap.innerHTML = `<div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">
+        No files in raw_downloads/ yet. Upload a file above or copy CSVs from your broker.
+      </div>`;
+      return;
+    }
+    const rows = files.map(f => {
+      const badge = f.ingested
+        ? `<span style="background:rgba(34,197,94,0.15);color:#22C55E;border-radius:4px;padding:1px 8px;font-size:10px;font-family:'DM Mono',monospace;">✓ ingested</span>`
+        : `<span style="background:rgba(245,158,11,0.15);color:#FCD34D;border-radius:4px;padding:1px 8px;font-size:10px;font-family:'DM Mono',monospace;">pending</span>`;
+      return `<tr>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent3);">${f.broker}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:12px;">${f.filename}</td>
+        <td style="font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);text-align:right;">${f.size_kb} KB</td>
+        <td>${badge}</td>
+      </tr>`;
+    }).join('');
+    wrap.innerHTML = `
+      <table class="vt-table">
+        <thead><tr><th>Broker</th><th>File</th><th style="text-align:right;">Size</th><th>Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch(e) {
+    wrap.innerHTML = `<div style="color:#F87171;font-size:12px;padding:16px;">${e.message}</div>`;
+  }
+}
+
+async function vaultRefreshLog() {
+  const box = document.getElementById('vt-log-box');
+  if (!box) return;
+  try {
+    const data = await vaultFetch('/api/log?lines=80');
+    const lines = (data.lines || []);
+    if (!lines.length) { box.textContent = 'Log is empty.'; return; }
+    box.innerHTML = lines.map(l => {
+      const cls = /ERROR/.test(l) ? 'log-error' : /WARNING|WARN/.test(l) ? 'log-warn'
+                : /✓|complete|success/i.test(l) ? 'log-ok' : 'log-info';
+      return `<span class="${cls}">${l.replace(/</g,'&lt;')}</span>`;
+    }).join('\n');
+    box.scrollTop = box.scrollHeight;
+  } catch { /* server might be briefly restarting */ }
+}
+
+function vaultSetButtons(disabled) {
+  ['ingest','build','report'].forEach(cmd => {
+    const btn = document.getElementById(`vt-btn-${cmd}`);
+    if (btn) btn.disabled = disabled;
+  });
+}
+
+function vaultPollJob(job) {
+  const jobEl = document.getElementById('vt-job-status');
+  if (!jobEl) return;
+  if (job.running) {
+    jobEl.style.display = '';
+    jobEl.textContent = `⏳ Running: ${job.command}…`;
+    vaultSetButtons(true);
+    if (!VAULT.pollTimer) {
+      VAULT.pollTimer = setInterval(async () => {
+        try {
+          const data = await vaultFetch('/api/status');
+          vaultPollJob(data.job || {});
+          vaultRefreshLog();
+          if (!data.job?.running) vaultLoadHoldings();
+        } catch { /* ignore */ }
+      }, 2000);
+    }
+  } else {
+    jobEl.style.display = job.rc != null ? '' : 'none';
+    if (job.rc === 0) {
+      jobEl.style.color = '#34D399';
+      jobEl.textContent = `✓ ${job.command} completed`;
+    } else if (job.rc != null) {
+      jobEl.style.color = '#F87171';
+      jobEl.textContent = `✗ ${job.command} failed (rc=${job.rc})`;
+    }
+    vaultSetButtons(false);
+    clearInterval(VAULT.pollTimer);
+    VAULT.pollTimer = null;
+  }
+}
+
+async function vaultRun(command) {
+  try {
+    const data = await vaultFetch(`/api/run/${command}`, { method: 'POST' });
+    if (data.started) {
+      vaultPollJob({ running: true, command });
+      setTimeout(vaultRefreshLog, 800);
+    }
+  } catch(e) {
+    const jobEl = document.getElementById('vt-job-status');
+    if (jobEl) { jobEl.style.display=''; jobEl.style.color='#F87171'; jobEl.textContent=`Error: ${e.message}`; }
+  }
+}
+
+async function vaultUpload(file) {
+  if (!file) return;
+  const broker = document.getElementById('vt-upload-broker')?.value || 'fidelity';
+  const statusEl = document.getElementById('vt-upload-status');
+  if (statusEl) { statusEl.style.display=''; statusEl.style.color='var(--muted)'; statusEl.textContent=`Uploading ${file.name}…`; }
+
+  const form = new FormData();
+  form.append('file', file);
+  form.append('broker', broker);
+  try {
+    const r = await fetch(`${VAULT.base()}/api/upload`, { method: 'POST', body: form });
+    const data = await r.json();
+    if (data.saved) {
+      if (statusEl) { statusEl.style.color='#34D399'; statusEl.textContent=`✓ Saved to ${broker}/${data.filename}`; }
+      vaultLoadFiles();
+    } else {
+      throw new Error(data.error || 'Upload failed');
+    }
+  } catch(e) {
+    if (statusEl) { statusEl.style.color='#F87171'; statusEl.textContent=`✗ ${e.message}`; }
+  }
+}
+
+function vaultOnShow() {
+  vaultCheckConnection();
+  /* Stop polling when user navigates away */
+  const observer = new MutationObserver(() => {
+    const panel = document.getElementById('tab-vault');
+    if (!panel?.classList.contains('active') && VAULT.pollTimer) {
+      clearInterval(VAULT.pollTimer);
+      VAULT.pollTimer = null;
+    }
+  });
+  observer.observe(document.getElementById('tab-vault'), { attributes: true });
 }
 </script>
 
