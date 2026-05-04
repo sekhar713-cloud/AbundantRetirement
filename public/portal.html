@@ -407,10 +407,6 @@ body {
         <thead><tr><th>Fund</th><th>Ticker</th><th>Within-Account</th><th>Portfolio %</th><th>$ Allocated</th><th>ER</th><th>Category</th><th>Location</th></tr></thead>
         <tbody id="fund-rows"></tbody>
       </table>
-      <div class="subsection">
-        <div class="section-title">Four-alpha framework</div>
-        <div class="alpha-grid" id="alpha-cards"></div>
-      </div>
     </div>
 
     <!-- ── Custom holdings mode ── -->
@@ -506,14 +502,6 @@ body {
       <div id="additions-section"></div>
     </div>
     <div class="metrics" id="overview-metrics"></div>
-
-    <!-- ── Section 3: DCP (V2) ───────────────────────────── -->
-    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border);">
-      <div class="section-title" style="margin-bottom:16px;border-bottom:none;padding-bottom:0;">
-        Deferred Compensation Plan <span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--dcp-color);font-weight:400;letter-spacing:0.04em;">(DCP / NQDC)</span>
-      </div>
-      <div id="dcp-section-content"></div>
-    </div>
 
   </div>
 
@@ -716,6 +704,10 @@ body {
     </div>
     <div style="overflow-x:auto;margin-top:24px;">
       <table class="nqdc-table" id="nw-table" style="min-width:600px;"></table>
+    </div>
+    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border);">
+      <div class="section-title">Four-alpha framework</div>
+      <div class="alpha-grid" id="alpha-cards"></div>
     </div>
   </div>
 
@@ -1902,10 +1894,6 @@ function buildOverview() {
   /* --- Fund rows --- */
   buildFundRows();
 
-  /* --- Alpha cards --- */
-  document.getElementById('alpha-cards').innerHTML = alphas.map(a =>
-    `<div class="alpha-card"><h3 style="color:${a.color};">${a.title}</h3><p>${a.desc}</p></div>`
-  ).join('');
 }
 
 function buildFundRows() {
@@ -4054,6 +4042,12 @@ function buildNetWorth() {
         <td style="font-family:'DM Mono',monospace;font-weight:600;">${fmtM(tot)}</td>
       </tr>`;
     }).join('')}</tbody>`;
+
+  /* --- Alpha cards --- */
+  const acEl = document.getElementById('alpha-cards');
+  if (acEl) acEl.innerHTML = alphas.map(a =>
+    `<div class="alpha-card"><h3 style="color:${a.color};">${a.title}</h3><p>${a.desc}</p></div>`
+  ).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════════════
