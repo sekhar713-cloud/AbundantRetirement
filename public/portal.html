@@ -503,6 +503,41 @@ body {
     </div>
     <div class="metrics" id="overview-metrics"></div>
 
+    <!-- ── Advisor / Management Fee ───────────────────────────── -->
+    <div style="margin-top:28px;padding-top:22px;border-top:1px solid var(--border);">
+      <div class="section-title" style="margin-bottom:12px;">Advisor / Management Fees</div>
+      <div class="alpha-card">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+          <div class="input-group" style="margin-bottom:0;flex:0 0 190px;">
+            <label>Fee type</label>
+            <select class="v3-input v3-select" id="af-type" onchange="afTypeChange()">
+              <option value="none">None</option>
+              <option value="aum">AUM-based (% of portfolio)</option>
+              <option value="fixed">Fixed annual ($)</option>
+            </select>
+          </div>
+          <div class="input-group" id="af-pct-group" style="display:none;margin-bottom:0;flex:0 0 130px;">
+            <label>Annual fee %</label>
+            <input type="number" class="v3-input" id="af-pct" value="1.0" min="0.01" max="3" step="0.05"
+                   oninput="advisorFeeState.pct=+this.value;afRefresh()">
+          </div>
+          <div class="input-group" id="af-fixed-group" style="display:none;margin-bottom:0;flex:0 0 160px;">
+            <label>Annual fee ($)</label>
+            <input type="number" class="v3-input" id="af-fixed" value="10000" min="0" step="500"
+                   oninput="advisorFeeState.fixed=+this.value;afRefresh()">
+          </div>
+          <div class="input-group" id="af-scope-group" style="display:none;margin-bottom:0;flex:0 0 185px;">
+            <label>Applies to</label>
+            <select class="v3-input v3-select" id="af-scope" onchange="advisorFeeState.scope=this.value;afRefresh()">
+              <option value="all">All accounts</option>
+              <option value="taxable">Taxable account only</option>
+            </select>
+          </div>
+        </div>
+        <div id="af-summary" style="display:none;margin-top:14px;padding:10px 14px;background:rgba(248,113,113,0.07);border:1px solid rgba(248,113,113,0.25);border-radius:6px;font-size:12px;font-family:'DM Mono',monospace;line-height:1.6;"></div>
+      </div>
+    </div>
+
   </div>
 
   <!-- ═══ LOCATION ALPHA (V1) ═══ -->
@@ -1894,6 +1929,9 @@ function buildOverview() {
   /* --- Fund rows --- */
   buildFundRows();
 
+  /* --- Advisor fee summary --- */
+  afUpdateSummary();
+
 }
 
 function buildFundRows() {
@@ -2441,6 +2479,7 @@ function solveTax(){
   const totalTax=oTax+cdTax+nTax, afterTax=gross-totalTax, effRate=gross>0?totalTax/gross:0;
   const divShare=(divs+cg)>0?divs/(divs+cg):0, divTaxEst=cdTax*divShare, cgTaxEst=cdTax-divTaxEst;
   const ordPct=gross>0?totalOrd/gross*100:0, divPct=gross>0?divs/gross*100:0, cgPct=gross>0?cg/gross*100:0;
+  const tcAdvisorFee = advisorFeeAnnual(state.taxable, stateBase());
   document.getElementById('tc-results').innerHTML=`
     <div class="metrics" style="grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px;">
       <div class="metric-card"><div class="label">Gross needed</div><div class="value accent" style="font-size:20px;">${fmtD(gross)}</div></div>
@@ -2475,6 +2514,12 @@ function solveTax(){
     <div class="tc-divider"></div>
     <div class="tc-row total"><span>Total federal tax</span><span class="val" style="color:var(--danger);">${fmtD(totalTax)}</span></div>
     <div class="tc-row highlight"><span>After-tax income</span><span class="val">${fmtD(afterTax)}</span></div>
+    ${tcAdvisorFee > 0 ? `
+    <div class="tc-divider"></div>
+    <div class="tc-row" style="color:var(--danger);"><span>Advisor / mgmt fee</span><span class="val">−${fmtD(tcAdvisorFee)}</span></div>
+    <div class="tc-row highlight" style="background:rgba(248,113,113,0.08);border-color:rgba(248,113,113,0.25);"><span>After tax &amp; fees</span><span class="val">${fmtD(Math.max(0, afterTax - tcAdvisorFee))}</span></div>
+    <div class="tc-note" style="color:var(--danger);opacity:0.75;">${advisorFeeState.type==='aum'?`${advisorFeeState.pct}% AUM · `:``}Based on current portfolio balance · Change fee in Starting Portfolio tab.</div>
+    ` : ''}
     <div class="tc-note">${tcFiling==='single'?'Single':'MFJ'} · 2025 brackets (OBBBA) · WA — no state tax · NIIT: ${fmtD(niitThr[tcFiling])} · Std ded: ${fmtD(sd)}</div>`;
 }
 
@@ -2511,6 +2556,62 @@ const incomeState = {
   otherAnnual:      0,   // annual other income (rental, part-time)
   otherEndAge:      75,  // age other income stops
 };
+
+/* ── Advisor / Management Fee ─────────────────────────────────────── */
+const advisorFeeState = {
+  enabled: false,
+  type:    'aum',   // 'aum' | 'fixed'
+  pct:     1.0,     // annual AUM % (e.g. 1.0 = 1%)
+  fixed:   10000,   // annual fixed fee $
+  scope:   'all',   // 'all' | 'taxable'
+};
+
+function advisorFeeAnnual(taxBal, totBal) {
+  if (!advisorFeeState.enabled) return 0;
+  if (advisorFeeState.type === 'fixed') return advisorFeeState.fixed;
+  const base = advisorFeeState.scope === 'taxable' ? taxBal : totBal;
+  return base * advisorFeeState.pct / 100;
+}
+
+function applyAdvisorFee(tax, trad, roth) {
+  const fee = advisorFeeAnnual(tax, tax + trad + roth);
+  if (fee <= 0) return { tax, trad, roth, fee: 0 };
+  let rem = fee;
+  const ft = Math.min(rem, tax); tax -= ft; rem -= ft;
+  if (rem > 0) { const fd = Math.min(rem, trad); trad -= fd; rem -= fd; }
+  if (rem > 0) roth = Math.max(0, roth - rem);
+  return { tax, trad, roth, fee };
+}
+
+function afTypeChange() {
+  const val = document.getElementById('af-type').value;
+  advisorFeeState.enabled = val !== 'none';
+  advisorFeeState.type    = val === 'none' ? 'aum' : val;
+  const show = val !== 'none';
+  document.getElementById('af-pct-group').style.display   = val === 'aum'   ? '' : 'none';
+  document.getElementById('af-fixed-group').style.display = val === 'fixed' ? '' : 'none';
+  document.getElementById('af-scope-group').style.display = show ? '' : 'none';
+  document.getElementById('af-summary').style.display     = show ? '' : 'none';
+  afRefresh();
+}
+
+function afRefresh() {
+  afUpdateSummary();
+  buildOverview();
+  updateRetirement();
+  solveTax();
+}
+
+function afUpdateSummary() {
+  const el = document.getElementById('af-summary');
+  if (!el || !advisorFeeState.enabled) return;
+  const fee        = advisorFeeAnnual(state.taxable, stateBase());
+  const scopeLabel = advisorFeeState.scope === 'taxable' ? 'taxable account only' : 'all accounts';
+  const typeLabel  = advisorFeeState.type === 'aum'
+    ? `${advisorFeeState.pct}% AUM on ${scopeLabel}`
+    : 'fixed annual';
+  el.innerHTML = `<span style="color:var(--danger);font-weight:600;">Est. current annual fee: ${fmtD(fee)}</span>&ensp;&middot;&ensp;${typeLabel}&ensp;&middot;&ensp;Deducted each year from portfolio — baked into NW trajectory, Financial Runway &amp; Tax Calc.`;
+}
 
 function ssAdjusted(claimAge) {
   if (!incomeState.ssBenefit) return 0;
@@ -2709,6 +2810,8 @@ function updateRetirement(){
     }
     balTax  *= (1 + netRet); balTrad *= (1 + netRet);
     balRoth *= (1 + netRet);
+    const afAcc = applyAdvisorFee(balTax, balTrad, balRoth);
+    balTax = afAcc.tax; balTrad = afAcc.trad; balRoth = afAcc.roth;
     if (dcpActive()) { balDCP *= (1 + dcpRet); balDCPc = (balDCPc + dcpState.annualContrib) * (1 + dcpCRet); }
   }
   if (dcpActive()) balDCP += balDCPc;
@@ -2847,6 +2950,8 @@ function updateRetirement(){
     balTax  *= (1 + netRet - 0.02);
     balTrad *= (1 + netRet);
     balRoth *= (1 + netRet);
+    const afRet = applyAdvisorFee(balTax, balTrad, balRoth);
+    balTax = afRet.tax; balTrad = afRet.trad; balRoth = afRet.roth;
 
     const totalEnd = balTax + balTrad + balRoth;
     const cwr = totalStart > 0 ? totalDraw / totalStart * 100 : 0;
@@ -3934,6 +4039,8 @@ function buildNetWorth() {
     if (y < accumYrs) {
       if (y < state.additions.length) { const a=state.additions[y]; bTax+=a.taxable; bTrad+=a.traditional; bRoth+=a.roth; }
       bTax*=(1+netRet); bTrad*=(1+netRet); bRoth*=(1+netRet);
+      const afA = applyAdvisorFee(bTax, bTrad, bRoth);
+      bTax = afA.tax; bTrad = afA.trad; bRoth = afA.roth;
       if (dcpActive()) { bDCPnw *= (1+dcpRet); bDCPnwc = (bDCPnwc + dcpState.annualContrib) * (1+dcpCRet); }
     }
   }
@@ -3964,6 +4071,8 @@ function buildNetWorth() {
     if (needLeft>0&&age>=60){ const at=Math.min(needLeft,Math.max(0,bTrad)); bTrad=Math.max(0,bTrad-at); needLeft-=at; }
     if (needLeft>0){ const ar=Math.min(needLeft,Math.max(0,bRoth)); bRoth=Math.max(0,bRoth-ar); }
     bTax*=(1+netRet); bTrad*=(1+netRet); bRoth*=(1+netRet);
+    const afR = applyAdvisorFee(bTax, bTrad, bRoth);
+    bTax = afR.tax; bTrad = afR.trad; bRoth = afR.roth;
     retire.push({ age, tax:bTax, trad:bTrad, roth:bRoth, dcp:dcpNWBal, phase:'retire' });
   }
 
@@ -4101,6 +4210,8 @@ function buildMonteCarlo() {
       if (y < state.additions.length) { const a = state.additions[y]; bTax+=a.taxable; bTrad+=a.traditional; bRoth+=a.roth; }
       const r = mu + sigma * mcRandn();
       bTax *= (1+r); bTrad *= (1+r); bRoth *= (1+r);
+      const afMcA = applyAdvisorFee(bTax, bTrad, bRoth);
+      bTax = afMcA.tax; bTrad = afMcA.trad; bRoth = afMcA.roth;
     }
     const yearVals = [bTax+bTrad+bRoth];
     let mcDcpBal = mcDcpRetBal, mcDcpLeft = dcpActive() ? dcpState.payoutYears : 0;
@@ -4124,6 +4235,8 @@ function buildMonteCarlo() {
       if (need>0){ const tr=Math.min(need,Math.max(0,bRoth)); bRoth=Math.max(0,bRoth-tr); }
       const r = mu + sigma * mcRandn();
       bTax *= (1+r); bTrad *= (1+r); bRoth *= (1+r);
+      const afMcR = applyAdvisorFee(bTax, bTrad, bRoth);
+      bTax = afMcR.tax; bTrad = afMcR.trad; bRoth = afMcR.roth;
       yearVals.push(Math.max(0, bTax+bTrad+bRoth));
     }
     results.push(yearVals);
